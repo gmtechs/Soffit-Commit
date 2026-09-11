@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/icons/icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Soffit Commit</title>
+    <style>
+      /* Local first-paint shell. It renders before Vite, React, or any API call. */
+      html, body, #root {
+        margin: 0; padding: 0; height: 100%;
+        background: #f4f3f0;
+        color: #2d2c2a;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      }
+      #launch-screen {
+        position: fixed; inset: 0; z-index: 9999;
+        display: grid; place-items: center;
+        background: #f4f3f0;
+        transition: opacity 180ms ease-out, visibility 180ms ease-out;
+      }
+      #launch-screen.is-ready { opacity: 0; visibility: hidden; pointer-events: none; }
+      .launch-content { display: grid; justify-items: center; gap: 14px; text-align: center; }
+      .launch-mark {
+        width: 46px; height: 46px; border-radius: 12px;
+        display: grid; place-items: center;
+        background: #e27100; color: #fff7ed; font-size: 23px; font-weight: 700;
+        box-shadow: 0 8px 20px rgba(226, 113, 0, .18);
+      }
+      .launch-title { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+      .launch-status { color: #6e6d68; font-size: 12px; }
+      .launch-loader { width: 22px; height: 22px; border: 2px solid #e9e7e2; border-top-color: #e27100; border-radius: 50%; animation: launch-spin .7s linear infinite; }
+      .launch-help { display: none; margin-top: 6px; border: 0; border-radius: 6px; padding: 7px 10px; background: #e27100; color: white; font: inherit; font-size: 12px; cursor: pointer; }
+      #launch-screen.is-slow .launch-status { display: none; }
+      #launch-screen.is-slow .launch-help { display: block; }
+      @keyframes launch-spin { to { transform: rotate(360deg); } }
+      html[data-theme="dark"] body, html[data-theme="dark"] #launch-screen { background: #1c1b19; color: #f0efeb; }
+      html[data-theme="dark"] .launch-status { color: #a6a49d; }
+      html[data-theme="dark"] .launch-loader { border-color: #3a3835; border-top-color: #e27100; }
+    </style>
+    <script>
+      // Apply persisted theme synchronously before first paint to prevent flash
+      try {
+        const t = localStorage.getItem("soffit-theme");
+        if (t === "dark") {
+          document.documentElement.setAttribute("data-theme", "dark");
+          document.body.style.background = "#1C1B19";
+        }
+      } catch(e) {}
+    </script>
+  </head>
+  <body>
+    <div id="launch-screen" role="status" aria-live="polite">
+      <div class="launch-content">
+        <div class="launch-mark" aria-hidden="true">S</div>
+        <div class="launch-title">Soffit Commit</div>
+        <div class="launch-loader" aria-hidden="true"></div>
+        <div class="launch-status">Starting your workspace…</div>
+        <button class="launch-help" type="button" onclick="window.location.reload()">Still starting? Reload</button>
+      </div>
+    </div>
+    <div id="root"></div>
+    <script>setTimeout(function () { document.getElementById('launch-screen')?.classList.add('is-slow'); }, 8000);</script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

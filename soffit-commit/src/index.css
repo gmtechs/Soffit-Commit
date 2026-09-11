@@ -1,0 +1,42 @@
+:root {
+  --color-primary: #E27100;
+  --color-ink: #2D2C2A;
+  --color-bg: #F4F3F0;
+  --color-surface: #FFFFFF;
+  --color-border: #E9E7E2;
+  --color-text-secondary: #6E6D68;
+  --color-text-muted: #A6A49D;
+  --color-success: #16A34A;
+  --color-danger: #DC2626;
+  --color-info: #3B82F6;
+  --color-warning: #F59E0B;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --shadow-card: none;
+}
+
+[data-theme="dark"] {
+  --color-bg: #1C1B19;
+  --color-surface: #252422;
+  --color-border: #3A3835;
+  --color-ink: #F0EFEB;
+  --color-text-secondary: #A6A49D;
+  --color-text-muted: #6E6D68;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--color-ink);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+a { color: inherit; text-decoration: none; }
+
+@keyframes soffit-spin { to { transform: rotate(360deg); } }

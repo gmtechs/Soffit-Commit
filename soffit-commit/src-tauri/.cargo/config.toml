@@ -1,0 +1,4 @@
+[build]
+# Limit to 2 parallel jobs to prevent CPU/RAM spike crashing the machine.
+# Increase to 4 when building on a more capable machine or CI.
+jobs = 2
