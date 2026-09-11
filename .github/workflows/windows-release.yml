@@ -1,0 +1,50 @@
+name: Windows release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows x64 installers
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: soffit-commit
+        shell: pwsh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: soffit-commit/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and publish installers
+        uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: soffit-commit
+          args: --target x86_64-pc-windows-msvc --bundles msi,nsis
+          tagName: app-v__VERSION__
+          releaseName: Soffit Commit v__VERSION__
+          releaseBody: Download the Windows installer below.
+          releaseDraft: true
+          prerelease: false
