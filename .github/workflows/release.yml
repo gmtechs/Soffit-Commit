@@ -29,10 +29,12 @@ jobs:
           - name: macOS Intel (.dmg)
             platform: macos-13
             rust-target: x86_64-apple-darwin
+            macos_deployment_target: "10.15"
             args: --target x86_64-apple-darwin --bundles dmg
           - name: macOS Apple silicon (.dmg)
             platform: macos-latest
             rust-target: aarch64-apple-darwin
+            macos_deployment_target: "11.0"
             args: --target aarch64-apple-darwin --bundles dmg
 
     steps:
@@ -64,6 +66,13 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      # llama.cpp uses C++ filesystem APIs that require macOS 10.15. Apple
+      # silicon itself requires macOS 11 or newer. Pin this explicitly so
+      # GitHub's changing runner defaults cannot select an incompatible SDK.
+      - name: Set macOS deployment target
+        if: runner.os == 'macOS'
+        run: echo "MACOSX_DEPLOYMENT_TARGET=${{ matrix.macos_deployment_target }}" >> "$GITHUB_ENV"
 
       - name: Build and attach native installers to the draft release
         uses: tauri-apps/tauri-action@v1
