@@ -1,8 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri as isTauriRuntime } from "@tauri-apps/api/core";
 
 /** True only when the UI is hosted by the Tauri desktop runtime. */
-export const isTauri = () =>
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+export const isTauri = () => isTauriRuntime();
 
 // ── Core types ────────────────────────────────────────────────────────────────
 export interface User { id: string; username: string; created_at: string; }
