@@ -1,27 +1,27 @@
+use super::engine::{get_sheet_data, set_cell, CellValue};
 /// Auto-detect header rows, data ranges, and provide per-record form access.
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use super::engine::{get_sheet_data, set_cell, CellValue};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FormLayout {
     pub sheet_index: usize,
-    pub header_row: u32,       // 1-based row where headers are found
-    pub data_start_row: u32,   // first data row (header_row + 1)
-    pub data_end_row: u32,     // last row with data
-    pub col_start: u32,        // first column (1-based)
-    pub col_end: u32,          // last column (1-based)
+    pub header_row: u32,     // 1-based row where headers are found
+    pub data_start_row: u32, // first data row (header_row + 1)
+    pub data_end_row: u32,   // last row with data
+    pub col_start: u32,      // first column (1-based)
+    pub col_end: u32,        // last column (1-based)
     pub headers: Vec<String>,
     pub total_records: u32,
-    pub detectable: bool,      // false = free-form layout, Form mode disabled
+    pub detectable: bool, // false = free-form layout, Form mode disabled
     pub disable_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FormRecord {
-    pub record_index: u32,     // 0-based among data rows
-    pub row: u32,              // actual sheet row (1-based)
+    pub record_index: u32, // 0-based among data rows
+    pub row: u32,          // actual sheet row (1-based)
     pub fields: Vec<FormField>,
 }
 
@@ -48,8 +48,14 @@ pub fn detect_form_layout(path: &Path, sheet_index: usize) -> Result<FormLayout>
 
     if data.rows.is_empty() || data.max_col == 0 {
         return Ok(FormLayout {
-            sheet_index, header_row: 0, data_start_row: 0, data_end_row: 0,
-            col_start: 0, col_end: 0, headers: vec![], total_records: 0,
+            sheet_index,
+            header_row: 0,
+            data_start_row: 0,
+            data_end_row: 0,
+            col_start: 0,
+            col_end: 0,
+            headers: vec![],
+            total_records: 0,
             detectable: false,
             disable_reason: Some("Sheet is empty".to_string()),
         });
@@ -60,10 +66,18 @@ pub fn detect_form_layout(path: &Path, sheet_index: usize) -> Result<FormLayout>
 
     if header_row_idx.is_none() {
         return Ok(FormLayout {
-            sheet_index, header_row: 0, data_start_row: 0, data_end_row: 0,
-            col_start: 0, col_end: 0, headers: vec![], total_records: 0,
+            sheet_index,
+            header_row: 0,
+            data_start_row: 0,
+            data_end_row: 0,
+            col_start: 0,
+            col_end: 0,
+            headers: vec![],
+            total_records: 0,
             detectable: false,
-            disable_reason: Some("No detectable header row found. This may be a free-form layout.".to_string()),
+            disable_reason: Some(
+                "No detectable header row found. This may be a free-form layout.".to_string(),
+            ),
         });
     }
 
@@ -74,8 +88,14 @@ pub fn detect_form_layout(path: &Path, sheet_index: usize) -> Result<FormLayout>
     let (col_start, col_end) = find_contiguous_cols(header_row);
     if col_start > col_end {
         return Ok(FormLayout {
-            sheet_index, header_row: 0, data_start_row: 0, data_end_row: 0,
-            col_start: 0, col_end: 0, headers: vec![], total_records: 0,
+            sheet_index,
+            header_row: 0,
+            data_start_row: 0,
+            data_end_row: 0,
+            col_start: 0,
+            col_end: 0,
+            headers: vec![],
+            total_records: 0,
             detectable: false,
             disable_reason: Some("Headers are not in a contiguous range.".to_string()),
         });
@@ -126,23 +146,41 @@ pub fn get_record(path: &Path, layout: &FormLayout, record_index: u32) -> Result
         return Err(anyhow!("Form mode is not available for this sheet"));
     }
     if record_index >= layout.total_records {
-        return Err(anyhow!("Record index {} out of range (total: {})", record_index, layout.total_records));
+        return Err(anyhow!(
+            "Record index {} out of range (total: {})",
+            record_index,
+            layout.total_records
+        ));
     }
 
     let row = layout.data_start_row + record_index;
     let data = get_sheet_data(path, layout.sheet_index)?;
-    let row_data = data.rows.get((row - 1) as usize)
+    let row_data = data
+        .rows
+        .get((row - 1) as usize)
         .ok_or_else(|| anyhow!("Row {} not found", row))?;
 
     let mut fields = Vec::new();
     for (i, header) in layout.headers.iter().enumerate() {
         let col = layout.col_start + i as u32;
-        let value = row_data.get((col - 1) as usize).cloned().unwrap_or(CellValue::Empty);
+        let value = row_data
+            .get((col - 1) as usize)
+            .cloned()
+            .unwrap_or(CellValue::Empty);
         let detected_type = detect_field_type(&value, header);
-        fields.push(FormField { col, header: header.clone(), value, detected_type });
+        fields.push(FormField {
+            col,
+            header: header.clone(),
+            value,
+            detected_type,
+        });
     }
 
-    Ok(FormRecord { record_index, row, fields })
+    Ok(FormRecord {
+        record_index,
+        row,
+        fields,
+    })
 }
 
 /// Save a record: validate then write only changed cells
@@ -183,8 +221,14 @@ pub fn save_record(
 
 fn find_header_row(rows: &[Vec<CellValue>]) -> Option<usize> {
     for (i, row) in rows.iter().enumerate().take(20) {
-        let text_count = row.iter().filter(|c| matches!(c, CellValue::Text(_))).count();
-        let non_empty = row.iter().filter(|c| !matches!(c, CellValue::Empty)).count();
+        let text_count = row
+            .iter()
+            .filter(|c| matches!(c, CellValue::Text(_)))
+            .count();
+        let non_empty = row
+            .iter()
+            .filter(|c| !matches!(c, CellValue::Empty))
+            .count();
         // Header row: mostly text, at least 2 columns
         if non_empty >= 2 && text_count as f32 / non_empty as f32 >= 0.7 {
             return Some(i);
@@ -235,7 +279,11 @@ fn validate_field(header: &str, value: &str, _col: u32) -> Option<String> {
     if h.contains("email") && !value.is_empty() && !value.contains('@') {
         return Some(format!("{}: invalid email address", header));
     }
-    if (h.contains("age") || h.contains("qty") || h.contains("quantity") || h.contains("count") || h.contains("number"))
+    if (h.contains("age")
+        || h.contains("qty")
+        || h.contains("quantity")
+        || h.contains("count")
+        || h.contains("number"))
         && !value.is_empty()
         && value.parse::<f64>().is_err()
     {

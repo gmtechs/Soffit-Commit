@@ -8,6 +8,8 @@ import { PeersPage } from "./pages/Peers";
 import { ExcelPage } from "./pages/Excel";
 import { ActivityPage } from "./pages/Activity";
 import { SettingsPage } from "./pages/Settings";
+import { HelpPage } from "./pages/Help";
+import { AboutPage } from "./pages/About";
 import { useAuthStore } from "./store/auth";
 import { ToastProvider } from "./components/ui/Toast";
 import { isTauri } from "./lib/tauri";
@@ -39,6 +41,8 @@ export default function App() {
             <Route path="/excel" element={<ExcelPage />} />
             <Route path="/activity" element={<ActivityPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="/about" element={<AboutPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

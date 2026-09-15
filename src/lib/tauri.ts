@@ -175,6 +175,8 @@ export const removePeer = (peerId: string) => invoke<void>("cmd_remove_peer", { 
 export const renamePeer = (peerId: string, newName: string) => invoke<void>("cmd_rename_peer", { peerId, newName });
 export const setPermission = (shareId: string, peerId: string, level: string) =>
   invoke<SharePermission>("cmd_set_permission", { shareId, peerId, level });
+export const getPeerPermissions = (peerId: string) =>
+  invoke<SharePermission[]>("cmd_get_peer_permissions", { peerId });
 
 // ── Shares ─────────────────────────────────────────────────────────────────────
 export const createShare = (path: string, displayName: string) =>

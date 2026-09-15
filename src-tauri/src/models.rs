@@ -121,7 +121,9 @@ impl FileKind {
             "parquet" => FileKind::Parquet,
             "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" => FileKind::Image,
             "pdf" => FileKind::Pdf,
-            "txt" | "md" | "rs" | "ts" | "js" | "py" | "json" | "toml" | "yaml" | "yml" => FileKind::Text,
+            "txt" | "md" | "rs" | "ts" | "js" | "py" | "json" | "toml" | "yaml" | "yml" => {
+                FileKind::Text
+            }
             _ => FileKind::Generic,
         }
     }

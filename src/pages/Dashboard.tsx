@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";import { HardDrive, RefreshCw, FileEdit, AlertTriangle, Users } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { dashboardStats, type DashboardStats } from "../lib/tauri";
 import { StatCard } from "../components/ui/StatCard";
+import { SyncProgressPanel } from "../components/ui/StatusBar";
 
 function formatBytes(b: number) {
   if (b >= 1e9) return (b / 1e9).toFixed(1) + " GB";
@@ -10,12 +11,6 @@ function formatBytes(b: number) {
   if (b >= 1e3) return (b / 1e3).toFixed(1) + " KB";
   return b + " B";
 }
-
-// Placeholder sync activity data
-const syncData = [
-  { month: "Jan", bytes: 120 }, { month: "Feb", bytes: 340 }, { month: "Mar", bytes: 200 },
-  { month: "Apr", bytes: 680 }, { month: "May", bytes: 420 }, { month: "Jun", bytes: 860 },
-];
 
 export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -45,23 +40,7 @@ export function DashboardPage() {
       <div style={{ ...cardGrid, gridTemplateColumns: "1fr 1fr 2fr" }}>
         <StatCard icon={<HardDrive size={18} />} title="Storage used" value={s ? formatBytes(s.storage_used_bytes) : "—"} delta={s?.storage_delta_pct ?? 0} detailsLink={() => navigate("/files")} />
         <StatCard icon={<RefreshCw size={18} />} title="Files synced" value={s ? String(s.files_synced) : "—"} delta={s?.files_synced_delta_pct ?? 0} detailsLink={() => navigate("/files")} />
-        <div style={{ background: "var(--color-surface)", borderRadius: "var(--radius-card)", border: "1px solid var(--color-border)", padding: 20 }}>
-          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", fontWeight: 500, marginBottom: 12 }}>Sync activity (last 6 months)</p>
-          <ResponsiveContainer width="100%" height={100}>
-            <AreaChart data={syncData}>
-              <defs>
-                <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-info)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="var(--color-info)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="month" tick={{ fontSize: 10, fill: "var(--color-text-muted)" }} axisLine={false} tickLine={false} />
-              <YAxis hide />
-              <Tooltip contentStyle={{ fontSize: 12 }} />
-              <Area type="monotone" dataKey="bytes" stroke="var(--color-info)" fill="url(#grad)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <SyncProgressPanel />
       </div>
 
       {/* Row 2: more stats */}

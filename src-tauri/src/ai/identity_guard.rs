@@ -2,10 +2,18 @@
 /// and replaces the whole response with the Soffit AI canned line if found.
 
 const BANNED_TERMS: &[&str] = &[
-    "qwen", "alibaba", "tongyi", "qianwen",
-    "openai", "anthropic", "google deepmind",
-    "meta ai", "mistral ai", "llama",
-    "hugging face", "huggingface",
+    "qwen",
+    "alibaba",
+    "tongyi",
+    "qianwen",
+    "openai",
+    "anthropic",
+    "google deepmind",
+    "meta ai",
+    "mistral ai",
+    "llama",
+    "hugging face",
+    "huggingface",
 ];
 
 const CANNED_RESPONSE: &str = "I'm Soffit AI, built by Laocta Techlabs.";
@@ -27,4 +35,6 @@ pub fn buffer_has_leak(buffer: &str) -> bool {
     BANNED_TERMS.iter().any(|t| lower.contains(t))
 }
 
-pub fn canned() -> &'static str { CANNED_RESPONSE }
+pub fn canned() -> &'static str {
+    CANNED_RESPONSE
+}

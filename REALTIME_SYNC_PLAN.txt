@@ -1,0 +1,86 @@
+REALTIME SYNC PLAN (execute top to bottom, no rethinking)
+=========================================================
+GOAL: new/changed files in linked folders propagate to peers in ~0.1-0.5s
+(+transfer) instead of the 8s poll. Both directions.
+
+FILES TO TOUCH
+--------------
+1. src-tauri/Cargo.toml
+   - add: notify = "6"   (inotify backend on linux, default features fine)
+
+2. src-tauri/src/network/protocol.rs
+   - add enum variant:
+       /// Fire-and-forget hint that a share folder changed locally, so the
+       /// peer re-syncs immediately instead of waiting for its poll tick.
+       LocalChange { share_id: String },
+   - add round-trip test tuple: (LocalChange{s1}, {"type":"local_change","share_id":"s1"})
+
+3. src-tauri/src/network/node.rs
+   - IrohNode: add pub field `change_notify: Arc<tokio::sync::Notify>`
+   - init in start(); after accept_loop spawn, also spawn
+     watcher::spawn_watchers(node.clone())
+
+4. src-tauri/src/network/watcher.rs (NEW FILE)
+   - pub async fn spawn_watchers(node: Arc<IrohNode>)
+   - recommended_watcher, channel mpsc(4096), nonblocking send
+   - watch_paths(node, &mut watcher): open db -> owned shares (is_owner=1)
+       + received mirrors (is_owner=0, path under shared_root) -> recursive watch
+   - debounce: 300ms loop_drain? NO: simple = on each event batch, sleep 300ms,
+     then drain pending events; per-share dedupe via HashSet<String>
+   - for each changed share_id:
+       node.change_notify.notify_waiters()          (wake local push loops)
+       for (peer, (conn, _)) in node.conns.lock():
+           send_control(conn, LocalChange{share_id}) (ignore errors, .await ok)
+   - rescan shares for NEW watch paths every 20s loop (or after ShareGranted
+     event via node.event_tx subscribe) -> add new paths, never remove
+   - ignore *.soffit-part events (filter on path suffix)
+
+5. src-tauri/src/network/sync.rs
+   a) push loop in run_peer_connection:
+        tokio::select! {
+            _ = node.change_notify.notified() => {},
+            _ = tokio::time::sleep(SYNC_INTERVAL) => {},
+            _ = conn.closed() => break,
+        }
+      (keep initial push before loop; remove old timeout/closed block)
+   b) service_peer_streams match: add arm
+        SyncMessage::LocalChange { share_id } => {
+            // receiver's mirror changed: re-index so OUR push diff and the
+            // next FileIndex reply are fresh, then wake our push loops.
+            if let Ok(db) = Connection::open(&node.db_path) {
+                if let Ok(Some((sid, path))) = share_path(&db, &share_id) { // owned or mirror
+                    shares::index_share_files(&db, &sid, &path).ok();
+                }
+            }
+            node.change_notify.notify_waiters();
+        }
+      (share_path = inline query SELECT path FROM shares WHERE id=?1)
+   c) FileIndexRequest handler: BEFORE current_local_index, open db and
+      index_share_files for that share_id (SELECT path FROM shares WHERE id=?)
+      so replies are fresh (receiver nudge relies on this).
+   d) ShareGrant handler: after ensure_receiver_share, spawn watcher add for
+      returned path: watcher::watch_one(node, &path) (pub helper, adds path to
+      global watcher via once_cell Lazy<Mutex<RecommendedWatcher>>)
+   e) send_control is already pub(crate)-visible within module; watcher.rs
+      needs it -> make `pub(crate) async fn send_control`.
+
+6. WIRING CHECKS
+   - sync.rs top: use crate::network::watcher;  (only if referenced)
+   - node.rs: pub mod path via network/mod.rs -> add `pub mod watcher;`
+
+7. VALIDATE (in order, do not skip)
+   1. cargo build --no-default-features (lib+bin compiles)
+   2. cargo test --no-default-features  (13 old + protocol roundtrip green)
+   3. dev watcher relinks binary -> restart soffit-i2, confirm 2 apps
+   4. live probe: write file in ~/Documents/DataQL, assert mirror match <5s
+      and 0 new conflicts (reuse probe pattern; output /tmp/probe-rt.txt)
+   5. report latencies (create + update) and confirm both units active
+
+RULES
+-----
+- No schema changes. No new config. Debounce 300ms. Dedupe per share.
+- All watcher failures are non-fatal: log to stderr, keep polling as fallback
+  (8s tick stays in select!).
+- Never block the runtime: watcher callback only sends on mpsc; async task
+  does db + network work.
+- Do not touch conflict logic / synced_hash (already correct).

@@ -8,10 +8,10 @@ import {
   Save, Lock, History, AlertTriangle, Grid3x3, MessageCircle,
 } from "lucide-react";
 import {
-  excelDetectForm, excelGetRecord, excelSaveRecord,
+  excelOpen, excelDetectForm, excelGetRecord, excelSaveRecord,
   listVersions, restoreVersion,
   getLock, acquireLock, releaseLock, recordFileOpen,
-  excelGetSheet, excelSetCell, writeFileBytes,
+  excelGetSheet, excelSetCell, writeFileBytes, readFileBase64,
   type FormLayout, type FormRecord, type CellValue, type Version, type SheetData, type SheetInfo,
 } from "../lib/tauri";
 import { useAuthStore } from "../store/auth";
@@ -34,6 +34,23 @@ function workbookText(sheets: any[] | null): string {
 function cellStr(v: CellValue): string {
   if (v === null || v === undefined) return "";
   return String(v);
+}
+
+// Convert native SheetData (rows of CellValue) into FortuneSheet `celldata`.
+// FortuneSheet stores cells as an array of { r, c, v: { v, m } } — one entry
+// per non-empty cell, indexed from (0,0).
+function sheetDataToFortune(d: SheetData): { r: number; c: number; v: { v: CellValue; m: string } }[] {
+  const celldata: { r: number; c: number; v: { v: CellValue; m: string } }[] = [];
+  for (let r = 0; r < d.rows.length; r++) {
+    const row = d.rows[r] ?? [];
+    for (let c = 0; c < row.length; c++) {
+      const value = row[c];
+      if (value !== null && value !== undefined && value !== "") {
+        celldata.push({ r, c, v: { v: value, m: String(value) } });
+      }
+    }
+  }
+  return celldata;
 }
 
 function GridView({ path, sheetIndex, sheet, onSaved }: { path: string; sheetIndex: number; sheet: SheetData | null; onSaved: () => void }) {
@@ -235,7 +252,7 @@ export function ExcelPage() {
   const activeSheetRef = useRef(0);
   const workbookRef = useRef<any>(null);
 
-  // Auto-open from Files page
+    // Auto-open from Files page
   useEffect(() => {
     if (pendingFile?.kind === "excel" && pendingFile.path) {
       openFile(pendingFile.path);
@@ -255,20 +272,62 @@ export function ExcelPage() {
   };
 
   const openFile = async (path: string) => {
+    let loadOk = false;
     try {
       setLoading(true);
       setSheetData(null);
       setFortuneSheets(null);
+      setSheets([]);
       setOpenPath(path);
       setActiveSheet(0);
       activeSheetRef.current = 0;
-      const base64 = await (await import("../lib/tauri")).readFileBase64(path);
+
+      // Get sheet names/metadata from the native backend
+      const sheetInfos = await excelOpen(path);
+      setSheets(sheetInfos.length > 0 ? sheetInfos : []);
+
+      // Load file bytes via the native reader (works in Tauri; web fallback would differ)
+      const base64 = await readFileBase64(path);
       const bytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
       const file = new File([bytes], path.split("/").pop() ?? "workbook.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+
+      // Convert to FortuneSheet-compatible data
       await transformExcelToFortune(file, (convertedSheets: any[]) => {
         setFortuneSheets(convertedSheets);
-        setSheets(convertedSheets.map((sheet, index) => ({ index, name: sheet.name ?? `Sheet ${index + 1}` })));
+        setWorkbookKey(k => k + 1);
+        if (convertedSheets.length > 0 && sheetInfos.length === 0) {
+          setSheets(convertedSheets.map((sheet, index) => ({
+            index,
+            name: sheet.name ?? `Sheet ${index + 1}`,
+          })));
+        }
       }, setWorkbookKey, workbookRef);
+
+      // Load data for the first sheet into the grid view
+      if (sheetInfos.length > 0) {
+        try {
+          const first = await excelGetSheet(path, 0);
+          setSheetData(first);
+          // If the Fortune conversion produced an empty grid, feed real cells
+          // into the Workbook directly from the native engine so the grid is
+          // never blank.
+          const fromNative = sheetDataToFortune(first);
+          const hasNativeData = first.rows.some(r => r.some(c => c !== null && c !== undefined));
+          if (hasNativeData && fromNative.length === 0) {
+            console.warn("[ExcelPage] sheetData is non-empty but celldata resolved to empty array");
+          } else if (fromNative.length > 0) {
+            setFortuneSheets(prev => {
+              if (!prev || prev.length === 0) return prev;
+              return prev.map((s, i) => {
+                if (i !== 0) return s;
+                const existing = Array.isArray(s?.celldata) ? s.celldata.length : 0;
+                return existing === 0 ? { ...s, celldata: fromNative } : s;
+              });
+            });
+            setWorkbookKey(k => k + 1);
+          }
+        } catch { /* form mode still available */ }
+      }
 
       const lock = await getLock(path);
       setLockInfo(lock ? { held_by_name: lock.held_by_name } : null);
@@ -277,11 +336,17 @@ export function ExcelPage() {
       // The native reader is optional: a workbook can still open and retain
       // styles even if it is not compatible with form mode.
       loadFormLayout(path, 0);
+      loadOk = true;
     } catch (err: any) {
-      setOpenPath(null);
-      setFortuneSheets(null);
-      toast("danger", `Failed to open file: ${err}`);
-    } finally { setLoading(false); }
+      if (!loadOk) {
+        setOpenPath(null);
+        setFortuneSheets(null);
+        setSheets([]);
+        toast("danger", `Failed to open Excel file: ${err?.message ?? err}`);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadFormLayout = async (path: string, idx: number) => {

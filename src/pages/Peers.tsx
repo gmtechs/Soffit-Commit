@@ -3,7 +3,8 @@ import { UserPlus, Trash2, Edit2, Check, X, Copy, Monitor } from "lucide-react";
 import {
   listPeers, removePeer, renamePeer, generatePairingCode,
   consumePairingCode, reconnectPeers,
-  type Peer, type PairingCodeWithQr,
+  listShares, setPermission, getPeerPermissions,
+  type Peer, type PairingCodeWithQr, type Share,
 } from "../lib/tauri";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
@@ -25,15 +26,35 @@ export function PeersPage() {
   const [entering, setEntering] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [ownedShares, setOwnedShares] = useState<Share[]>([]);
+  const [permMap, setPermMap] = useState<Record<string, "none" | "view" | "edit">>({});
   const { toast } = useToast();
 
-  const load = () => listPeers().then(setPeers).catch(() => {});
+  const load = () => {
+    listShares()
+      .then(all => setOwnedShares(all.filter(s => s.is_owner)))
+      .catch(() => {});
+    listPeers().then(async ps => {
+      setPeers(ps);
+      if (ps.length === 0) return;
+      const rows = await Promise.all(ps.map(p => getPeerPermissions(p.id).catch(() => [])));
+      setPermMap(prev => {
+        const next: Record<string, "none" | "view" | "edit"> = { ...prev };
+        ps.forEach((p, i) => {
+          for (const row of rows[i]) next[`${p.id}:${row.share_id}`] = row.level;
+        });
+        return next;
+      });
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     load();
     reconnectPeers().then(n => {
       if (n > 0) toast("success", `Reconnecting to ${n} known peer${n !== 1 ? "s" : ""}…`);
     }).catch(() => {});
+    const poll = window.setInterval(load, 3000);
+    return () => window.clearInterval(poll);
   }, []);
 
   const openPairModal = async () => {
@@ -47,8 +68,8 @@ export function PeersPage() {
 
   const copyCode = () => {
     if (!pairingCode) return;
-    navigator.clipboard.writeText(pairingCode.short_code);
-    toast("success", "Code copied — paste it on the other PC");
+    navigator.clipboard.writeText(pairingCode.code);
+    toast("success", "Connection code copied — paste it on the other PC");
   };
 
   const copyFullCode = () => {
@@ -86,6 +107,16 @@ export function PeersPage() {
     catch (err: any) { toast("danger", String(err)); }
   };
 
+  const handlePermission = async (peerId: string, shareId: string, shareName: string, level: string) => {
+    try {
+      await setPermission(shareId, peerId, level);
+      setPermMap(m => ({ ...m, [`${peerId}:${shareId}`]: level as "none" | "view" | "edit" }));
+      toast("success", level === "none"
+        ? `Access to "${shareName}" revoked`
+        : `"${shareName}" shared — this device can ${level === "view" ? "view" : "edit"}`);
+    } catch (err: any) { toast("danger", String(err)); }
+  };
+
   const tabStyle = (active: boolean): React.CSSProperties => ({
     flex: 1, padding: "8px 0", border: "none", borderRadius: 8, fontSize: 13,
     fontWeight: 500, cursor: "pointer", transition: "all 0.15s",
@@ -121,7 +152,7 @@ export function PeersPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "var(--color-bg)", borderBottom: "1px solid var(--color-border)" }}>
-                {["Device", "Status", "Last seen", "Actions"].map((h, i) => (
+                {["Device", "Status", "Shared folders", "Last seen", "Actions"].map((h, i) => (
                   <th key={i} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "var(--color-text-secondary)" }}>{h}</th>
                 ))}
               </tr>
@@ -159,6 +190,30 @@ export function PeersPage() {
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: p.is_online ? "var(--color-success)" : "var(--color-text-muted)", display: "inline-block", opacity: p.is_online ? 1 : 0.5 }} />
                       {p.is_online ? "Online" : "Offline"}
                     </span>
+                  </td>
+                  <td style={{ padding: "12px 16px" }}>
+                    {ownedShares.length === 0 ? (
+                      <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>No shares yet</span>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {ownedShares.map(s => (
+                          <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                            <span title={s.path} style={{ fontSize: 12, color: "var(--color-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>
+                              {s.display_name}
+                            </span>
+                            <select
+                              value={permMap[`${p.id}:${s.id}`] ?? "none"}
+                              onChange={e => handlePermission(p.id, s.id, s.display_name, e.target.value)}
+                              style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid var(--color-border)", fontSize: 12, background: "var(--color-bg)", color: "var(--color-ink)", cursor: "pointer" }}
+                            >
+                              <option value="none">No access</option>
+                              <option value="view">View</option>
+                              <option value="edit">Edit</option>
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: "12px 16px", color: "var(--color-text-secondary)" }}>
                     {p.last_seen ? new Date(p.last_seen).toLocaleString() : "Never"}

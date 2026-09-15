@@ -9,7 +9,12 @@ Never mention Qwen, Alibaba, Alibaba Cloud, Tongyi Qianwen, or any other AI lab 
 Answer only using the information given below. If it is not enough to answer, say so — do not use outside knowledge.\n\n";
 
 /// 6.1 Explain a sync conflict
-pub fn conflict_explain(file_path: &str, local_meta: &str, remote_meta: &str, diff_snippet: Option<&str>) -> String {
+pub fn conflict_explain(
+    file_path: &str,
+    local_meta: &str,
+    remote_meta: &str,
+    diff_snippet: Option<&str>,
+) -> String {
     let diff_part = diff_snippet
         .map(|d| format!("\nDiff snippet:\n{d}"))
         .unwrap_or_default();
@@ -23,36 +28,44 @@ Remote version: {remote_meta}{diff_part}")
 
 /// 6.2 Explain a SQL error
 pub fn sql_error_explain(sql_text: &str, error_msg: &str) -> String {
-    format!("{IDENTITY_PREFIX}\
+    format!(
+        "{IDENTITY_PREFIX}\
 Explain this SQL error in plain language using only the query and error text given. \
 Point to the specific line or statement likely responsible. \
 Do not invent SQL features that were not in the query.\n\n\
-SQL:\n{sql_text}\n\nError:\n{error_msg}")
+SQL:\n{sql_text}\n\nError:\n{error_msg}"
+    )
 }
 
 /// 6.3 Natural language → draft SQL (output constrained via grammar)
 pub fn nl_to_sql(schema: &str, user_question: &str) -> String {
-    format!("{IDENTITY_PREFIX}\
+    format!(
+        "{IDENTITY_PREFIX}\
 You translate a natural language question into a SQL query using only the schema provided. \
 Respond with valid JSON only: {{\"sql\": \"...\", \"explanation\": \"...\"}}. \
 Do not add any text outside the JSON.\n\n\
-Schema:\n{schema}\n\nQuestion: {user_question}")
+Schema:\n{schema}\n\nQuestion: {user_question}"
+    )
 }
 
 /// 6.4 Activity summary
 pub fn activity_summary(log_entries: &str, time_window: &str) -> String {
-    format!("{IDENTITY_PREFIX}\
+    format!(
+        "{IDENTITY_PREFIX}\
 Summarize only the activity log entries below for the period: {time_window}. \
 Do not reference files, peers, or events not listed.\n\n\
-Activity log:\n{log_entries}")
+Activity log:\n{log_entries}"
+    )
 }
 
 /// 6.6 Data insights (stats pre-computed in Rust — model only phrases them)
 pub fn data_insights(precomputed_stats: &str) -> String {
-    format!("{IDENTITY_PREFIX}\
+    format!(
+        "{IDENTITY_PREFIX}\
 Phrase the following pre-computed statistics in plain language. \
 Do not calculate anything yourself — only describe the numbers given.\n\n\
-Statistics:\n{precomputed_stats}")
+Statistics:\n{precomputed_stats}"
+    )
 }
 
 /// Document-grounded chat. The caller supplies a bounded local excerpt only.

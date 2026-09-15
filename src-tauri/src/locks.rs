@@ -1,16 +1,39 @@
+use crate::models::Lock;
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use rusqlite::Connection;
 use uuid::Uuid;
-use crate::models::Lock;
 
 const DEFAULT_LOCK_TIMEOUT_MINUTES: i64 = 15;
 
-pub fn acquire_lock(conn: &Connection, file_path: &str, peer_id: &str, peer_name: &str) -> Result<Lock> {
+/// Locks live for the user-configured timeout (Settings → Lock timeout). The
+/// setting is stored in app_settings by the UI; fall back to the default when
+/// it is absent or out of range.
+fn configured_timeout_minutes(conn: &Connection) -> i64 {
+    conn.query_row(
+        "SELECT value FROM app_settings WHERE key = 'lock_timeout_minutes'",
+        [],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|v| v.trim().parse::<i64>().ok())
+    .filter(|minutes| (1..=1440).contains(minutes))
+    .unwrap_or(DEFAULT_LOCK_TIMEOUT_MINUTES)
+}
+
+pub fn acquire_lock(
+    conn: &Connection,
+    file_path: &str,
+    peer_id: &str,
+    peer_name: &str,
+) -> Result<Lock> {
     // Check if already locked
     if let Some(existing) = get_lock(conn, file_path)? {
         if !is_lock_expired(&existing) {
-            return Err(anyhow::anyhow!("File is locked by {}", existing.held_by_name));
+            return Err(anyhow::anyhow!(
+                "File is locked by {}",
+                existing.held_by_name
+            ));
         }
         // Expired lock — release it first
         release_lock_internal(conn, file_path)?;
@@ -18,7 +41,7 @@ pub fn acquire_lock(conn: &Connection, file_path: &str, peer_id: &str, peer_name
 
     let id = Uuid::new_v4().to_string();
     let acquired_at = Utc::now().to_rfc3339();
-    let expires_at = (Utc::now() + Duration::minutes(DEFAULT_LOCK_TIMEOUT_MINUTES)).to_rfc3339();
+    let expires_at = (Utc::now() + Duration::minutes(configured_timeout_minutes(conn))).to_rfc3339();
 
     conn.execute(
         "INSERT INTO locks (id, file_path, held_by_peer_id, held_by_name, acquired_at, expires_at)
@@ -26,7 +49,14 @@ pub fn acquire_lock(conn: &Connection, file_path: &str, peer_id: &str, peer_name
         rusqlite::params![id, file_path, peer_id, peer_name, acquired_at, expires_at],
     )?;
 
-    Ok(Lock { id, file_path: file_path.to_string(), held_by_peer_id: peer_id.to_string(), held_by_name: peer_name.to_string(), acquired_at, expires_at })
+    Ok(Lock {
+        id,
+        file_path: file_path.to_string(),
+        held_by_peer_id: peer_id.to_string(),
+        held_by_name: peer_name.to_string(),
+        acquired_at,
+        expires_at,
+    })
 }
 
 pub fn release_lock(conn: &Connection, file_path: &str, peer_id: &str) -> Result<bool> {
@@ -38,7 +68,10 @@ pub fn release_lock(conn: &Connection, file_path: &str, peer_id: &str) -> Result
 }
 
 fn release_lock_internal(conn: &Connection, file_path: &str) -> Result<()> {
-    conn.execute("DELETE FROM locks WHERE file_path = ?1", rusqlite::params![file_path])?;
+    conn.execute(
+        "DELETE FROM locks WHERE file_path = ?1",
+        rusqlite::params![file_path],
+    )?;
     Ok(())
 }
 
@@ -66,24 +99,30 @@ pub fn list_active_locks(conn: &Connection) -> Result<Vec<Lock>> {
     let now = Utc::now().to_rfc3339();
     let mut stmt = conn.prepare(
         "SELECT id, file_path, held_by_peer_id, held_by_name, acquired_at, expires_at
-         FROM locks WHERE expires_at > ?1 ORDER BY acquired_at DESC"
+         FROM locks WHERE expires_at > ?1 ORDER BY acquired_at DESC",
     )?;
-    let locks = stmt.query_map(rusqlite::params![now], |row| {
-        Ok(Lock {
-            id: row.get(0)?,
-            file_path: row.get(1)?,
-            held_by_peer_id: row.get(2)?,
-            held_by_name: row.get(3)?,
-            acquired_at: row.get(4)?,
-            expires_at: row.get(5)?,
-        })
-    })?.filter_map(|r| r.ok()).collect();
+    let locks = stmt
+        .query_map(rusqlite::params![now], |row| {
+            Ok(Lock {
+                id: row.get(0)?,
+                file_path: row.get(1)?,
+                held_by_peer_id: row.get(2)?,
+                held_by_name: row.get(3)?,
+                acquired_at: row.get(4)?,
+                expires_at: row.get(5)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
     Ok(locks)
 }
 
 pub fn cleanup_expired_locks(conn: &Connection) -> Result<usize> {
     let now = Utc::now().to_rfc3339();
-    let rows = conn.execute("DELETE FROM locks WHERE expires_at <= ?1", rusqlite::params![now])?;
+    let rows = conn.execute(
+        "DELETE FROM locks WHERE expires_at <= ?1",
+        rusqlite::params![now],
+    )?;
     Ok(rows)
 }
 

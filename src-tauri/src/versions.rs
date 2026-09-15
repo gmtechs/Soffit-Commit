@@ -3,10 +3,10 @@
 use anyhow::Result;
 use chrono::Utc;
 use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use uuid::Uuid;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Version {
@@ -20,7 +20,8 @@ pub struct Version {
 }
 
 pub fn ensure_versions_table(conn: &Connection) -> Result<()> {
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS file_versions (
             id            TEXT PRIMARY KEY,
             file_path     TEXT NOT NULL,
@@ -31,7 +32,8 @@ pub fn ensure_versions_table(conn: &Connection) -> Result<()> {
             snapshot_path TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_versions_path ON file_versions(file_path, created_at DESC);
-    ")?;
+    ",
+    )?;
     Ok(())
 }
 
@@ -71,26 +73,37 @@ pub fn snapshot_file(
         rusqlite::params![id, fp, hash, size_bytes as i64, created_at, actor, sp],
     )?;
 
-    Ok(Some(Version { id, file_path: fp, hash, size_bytes, created_at, actor: actor.to_string(), snapshot_path: sp }))
+    Ok(Some(Version {
+        id,
+        file_path: fp,
+        hash,
+        size_bytes,
+        created_at,
+        actor: actor.to_string(),
+        snapshot_path: sp,
+    }))
 }
 
 /// List all versions for a file, newest first
 pub fn list_versions(conn: &Connection, file_path: &str) -> Result<Vec<Version>> {
     let mut stmt = conn.prepare(
         "SELECT id, file_path, hash, size_bytes, created_at, actor, snapshot_path
-         FROM file_versions WHERE file_path = ?1 ORDER BY created_at DESC"
+         FROM file_versions WHERE file_path = ?1 ORDER BY created_at DESC",
     )?;
-    let versions = stmt.query_map(rusqlite::params![file_path], |row| {
-        Ok(Version {
-            id: row.get(0)?,
-            file_path: row.get(1)?,
-            hash: row.get(2)?,
-            size_bytes: row.get::<_, i64>(3)? as u64,
-            created_at: row.get(4)?,
-            actor: row.get(5)?,
-            snapshot_path: row.get(6)?,
-        })
-    })?.filter_map(|r| r.ok()).collect();
+    let versions = stmt
+        .query_map(rusqlite::params![file_path], |row| {
+            Ok(Version {
+                id: row.get(0)?,
+                file_path: row.get(1)?,
+                hash: row.get(2)?,
+                size_bytes: row.get::<_, i64>(3)? as u64,
+                created_at: row.get(4)?,
+                actor: row.get(5)?,
+                snapshot_path: row.get(6)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
     Ok(versions)
 }
 

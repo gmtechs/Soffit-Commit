@@ -16,7 +16,12 @@ export default defineConfig(() => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // Bind every interface instead of only the first resolution of
+    // `localhost`. `localhost` resolves to both 127.0.0.1 and ::1 here, and a
+    // webview that picks the IPv4 address while Vite listens on ::1 (the
+    // default) fails the page load with "Connection refused" — which breaks
+    // every extra instance that shares this dev server.
+    host: host || true,
     hmr: host
       ? {
           protocol: "ws",

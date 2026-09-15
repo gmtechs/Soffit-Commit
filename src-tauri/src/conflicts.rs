@@ -29,7 +29,8 @@ pub struct Conflict {
 }
 
 pub fn ensure_conflicts_table(conn: &Connection) -> Result<()> {
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS conflicts (
             id              TEXT PRIMARY KEY,
             file_path       TEXT NOT NULL,
@@ -40,7 +41,8 @@ pub fn ensure_conflicts_table(conn: &Connection) -> Result<()> {
             resolved        INTEGER NOT NULL DEFAULT 0,
             resolution      TEXT
         );
-    ")?;
+    ",
+    )?;
     Ok(())
 }
 
@@ -66,9 +68,14 @@ pub fn record_conflict(
         rusqlite::params![id, file_path, local_hash, remote_hash, remote_peer_id, detected_at],
     )?;
     Ok(Conflict {
-        id, file_path: file_path.to_string(), local_hash: local_hash.to_string(),
-        remote_hash: remote_hash.to_string(), remote_peer_id: remote_peer_id.to_string(),
-        detected_at, resolved: false, resolution: None,
+        id,
+        file_path: file_path.to_string(),
+        local_hash: local_hash.to_string(),
+        remote_hash: remote_hash.to_string(),
+        remote_peer_id: remote_peer_id.to_string(),
+        detected_at,
+        resolved: false,
+        resolution: None,
     })
 }
 
@@ -78,18 +85,21 @@ pub fn list_conflicts(conn: &Connection) -> Result<Vec<Conflict>> {
         "SELECT id, file_path, local_hash, remote_hash, remote_peer_id, detected_at, resolved, resolution
          FROM conflicts WHERE resolved = 0 ORDER BY detected_at DESC"
     )?;
-    let items = stmt.query_map([], |row| {
-        Ok(Conflict {
-            id: row.get(0)?,
-            file_path: row.get(1)?,
-            local_hash: row.get(2)?,
-            remote_hash: row.get(3)?,
-            remote_peer_id: row.get(4)?,
-            detected_at: row.get(5)?,
-            resolved: row.get::<_, i32>(6)? != 0,
-            resolution: row.get(7)?,
-        })
-    })?.filter_map(|r| r.ok()).collect();
+    let items = stmt
+        .query_map([], |row| {
+            Ok(Conflict {
+                id: row.get(0)?,
+                file_path: row.get(1)?,
+                local_hash: row.get(2)?,
+                remote_hash: row.get(3)?,
+                remote_peer_id: row.get(4)?,
+                detected_at: row.get(5)?,
+                resolved: row.get::<_, i32>(6)? != 0,
+                resolution: row.get(7)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
     Ok(items)
 }
 
@@ -119,9 +129,13 @@ pub fn resolve_conflict(
         ConflictResolution::KeepBoth => {
             if let Some(bytes) = their_bytes {
                 // Write theirs with a .conflict suffix
-                let conflict_path = local_path.with_extension(
-                    format!("{}.conflict", local_path.extension().and_then(|e| e.to_str()).unwrap_or(""))
-                );
+                let conflict_path = local_path.with_extension(format!(
+                    "{}.conflict",
+                    local_path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("")
+                ));
                 std::fs::write(conflict_path, bytes)?;
             }
         }

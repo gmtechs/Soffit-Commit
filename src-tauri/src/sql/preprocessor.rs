@@ -10,22 +10,33 @@ pub fn preprocess_mysql_dump(sql: &str) -> String {
         let trimmed = line.trim();
 
         // Skip blank lines
-        if trimmed.is_empty() { continue; }
+        if trimmed.is_empty() {
+            continue;
+        }
 
         // Skip pure comment lines
-        if trimmed.starts_with("--") { continue; }
+        if trimmed.starts_with("--") {
+            continue;
+        }
 
         // Skip versioned comments /*!... */
-        if trimmed.starts_with("/*!") { continue; }
+        if trimmed.starts_with("/*!") {
+            continue;
+        }
 
         // Skip MySQL session directives
-        if is_mysql_directive(trimmed) { continue; }
+        if is_mysql_directive(trimmed) {
+            continue;
+        }
 
         // Skip KEY/INDEX lines inside CREATE TABLE (they cause syntax errors in SQLite)
         // But keep PRIMARY KEY lines
         let upper = trimmed.to_uppercase();
-        if (upper.starts_with("KEY ") || upper.starts_with("UNIQUE KEY ") || upper.starts_with("INDEX "))
-            && !upper.starts_with("PRIMARY KEY") {
+        if (upper.starts_with("KEY ")
+            || upper.starts_with("UNIQUE KEY ")
+            || upper.starts_with("INDEX "))
+            && !upper.starts_with("PRIMARY KEY")
+        {
             continue;
         }
 
@@ -81,12 +92,25 @@ fn translate_line(line: &str) -> String {
 
     while let Some(ch) = chars.next() {
         match ch {
-            '\'' if !in_double => { in_single = !in_single; out.push(ch); }
-            '"'  if !in_single => { in_double = !in_double; out.push(ch); }
-            '`'  if !in_single && !in_double => {
+            '\'' if !in_double => {
+                in_single = !in_single;
+                out.push(ch);
+            }
+            '"' if !in_single => {
+                in_double = !in_double;
+                out.push(ch);
+            }
+            '`' if !in_single && !in_double => {
                 let mut ident = String::new();
-                for c in chars.by_ref() { if c == '`' { break; } ident.push(c); }
-                out.push('"'); out.push_str(&ident); out.push('"');
+                for c in chars.by_ref() {
+                    if c == '`' {
+                        break;
+                    }
+                    ident.push(c);
+                }
+                out.push('"');
+                out.push_str(&ident);
+                out.push('"');
             }
             _ => out.push(ch),
         }
@@ -96,23 +120,24 @@ fn translate_line(line: &str) -> String {
 }
 
 fn translate_ddl_types(sql: &str) -> String {
-    let int_n     = Regex::new(r"(?i)\b(?:tiny|small|medium|big)?int\s*\(\s*\d+\s*\)").unwrap();
-    let varchar   = Regex::new(r"(?i)\b(?:var)?char\s*\(\s*\d+\s*\)").unwrap();
-    let floatp    = Regex::new(r"(?i)\b(?:double|float|decimal\s*\(\s*\d+\s*,\s*\d+\s*\))").unwrap();
-    let longtext  = Regex::new(r"(?i)\b(?:long|medium|tiny)text\b").unwrap();
-    let ts        = Regex::new(r"(?i)\b(?:datetime|timestamp)\b").unwrap();
-    let engine    = Regex::new(r"(?i)\s*ENGINE\s*=\s*\w+").unwrap();
-    let charset   = Regex::new(r"(?i)\s*(?:DEFAULT\s+)?(?:CHARSET|CHARACTER\s+SET)\s*=?\s*[\w-]+").unwrap();
-    let collate   = Regex::new(r"(?i)\s*COLLATE\s*=?\s*[\w-]+").unwrap();
-    let ai_opt    = Regex::new(r"(?i)\s*AUTO_INCREMENT\s*=\s*\d+").unwrap();
-    let ai        = Regex::new(r"(?i)\s*\bAUTO_INCREMENT\b").unwrap();
-    let unsigned  = Regex::new(r"(?i)\s*\bUNSIGNED\b").unwrap();
+    let int_n = Regex::new(r"(?i)\b(?:tiny|small|medium|big)?int\s*\(\s*\d+\s*\)").unwrap();
+    let varchar = Regex::new(r"(?i)\b(?:var)?char\s*\(\s*\d+\s*\)").unwrap();
+    let floatp = Regex::new(r"(?i)\b(?:double|float|decimal\s*\(\s*\d+\s*,\s*\d+\s*\))").unwrap();
+    let longtext = Regex::new(r"(?i)\b(?:long|medium|tiny)text\b").unwrap();
+    let ts = Regex::new(r"(?i)\b(?:datetime|timestamp)\b").unwrap();
+    let engine = Regex::new(r"(?i)\s*ENGINE\s*=\s*\w+").unwrap();
+    let charset =
+        Regex::new(r"(?i)\s*(?:DEFAULT\s+)?(?:CHARSET|CHARACTER\s+SET)\s*=?\s*[\w-]+").unwrap();
+    let collate = Regex::new(r"(?i)\s*COLLATE\s*=?\s*[\w-]+").unwrap();
+    let ai_opt = Regex::new(r"(?i)\s*AUTO_INCREMENT\s*=\s*\d+").unwrap();
+    let ai = Regex::new(r"(?i)\s*\bAUTO_INCREMENT\b").unwrap();
+    let unsigned = Regex::new(r"(?i)\s*\bUNSIGNED\b").unwrap();
     // MySQL functions not supported in SQLite
-    let cur_ts    = Regex::new(r"(?i)\bCURRENT_TIMESTAMP\s*\(\s*\)").unwrap();
-    let now_fn    = Regex::new(r"(?i)\bNOW\s*\(\s*\)").unwrap();
-    let sysdate   = Regex::new(r"(?i)\bSYSDATE\s*\(\s*\)").unwrap();
+    let cur_ts = Regex::new(r"(?i)\bCURRENT_TIMESTAMP\s*\(\s*\)").unwrap();
+    let now_fn = Regex::new(r"(?i)\bNOW\s*\(\s*\)").unwrap();
+    let sysdate = Regex::new(r"(?i)\bSYSDATE\s*\(\s*\)").unwrap();
     // MySQL ENUM/SET → TEXT
-    let enum_set  = Regex::new(r"(?i)\b(?:ENUM|SET)\s*\([^)]*\)").unwrap();
+    let enum_set = Regex::new(r"(?i)\b(?:ENUM|SET)\s*\([^)]*\)").unwrap();
     // ON UPDATE CURRENT_TIMESTAMP clause
     let on_update = Regex::new(r"(?i)\s*ON\s+UPDATE\s+\S+").unwrap();
 
@@ -163,7 +188,10 @@ COMMIT;
         assert!(!out.contains("START TRANSACTION"), "no START TRANSACTION");
         assert!(!out.contains("ADD PRIMARY KEY"), "no ADD PRIMARY KEY");
         assert!(!out.contains("MODIFY"), "no MODIFY");
-        assert!(!out.contains("current_timestamp()"), "no current_timestamp()");
+        assert!(
+            !out.contains("current_timestamp()"),
+            "no current_timestamp()"
+        );
         assert!(out.contains("CURRENT_TIMESTAMP"), "has CURRENT_TIMESTAMP");
         assert!(out.contains("CREATE TABLE"), "has CREATE TABLE");
         assert!(out.contains("INSERT INTO"), "has INSERT");

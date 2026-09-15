@@ -28,6 +28,33 @@ npm install
 cargo tauri dev
 ```
 
+## Testing with a second local device
+
+Use the normal command above for your first device. To run a second, independent
+development device on the same computer, start this launcher in another terminal:
+
+```bash
+./scripts/run-second-instance.sh
+```
+
+It runs the frontend on `127.0.0.1:1422` (the primary instance uses `1420`) and stores
+the second device's database, settings, and Iroh identity in
+`.tauri-test-instance/`. The two windows therefore behave like two separate PCs
+for account, pairing, and peer-to-peer testing.
+
+To keep the second device running after closing the terminal or ending an agent
+session, run it in a detached tmux session:
+
+```bash
+tmux new-session -d -s soffit-second './scripts/run-second-instance.sh 2>&1 | tee logs/second-instance.log'
+```
+
+Watch its startup output with `tail -f logs/second-instance.log` or attach with
+`tmux attach -t soffit-second`. Detach from tmux with `Ctrl-b`, then `d`; stop it
+with `tmux kill-session -t soffit-second`. To reset the simulated
+device completely, stop it and delete only `.tauri-test-instance/`; this does not
+affect the primary instance.
+
 ## Build
 
 ```bash

@@ -1,9 +1,9 @@
+use crate::ai::identity_guard;
 /// llama-cpp-2 wrapper: load model, run chat completion, stream tokens.
 use anyhow::{anyhow, Result};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
-use crate::ai::identity_guard;
 
 /// The document-chat budget is deliberately small. Retrieval selects relevant
 /// passages before inference, so allocating an 8K context merely wastes RAM.
@@ -19,24 +19,43 @@ pub const CHAT_MAX_GENERATED_TOKENS: i32 = 128;
 /// Serialize all completions until the dedicated long-lived worker lands.
 static INFERENCE_GATE: OnceLock<Mutex<()>> = OnceLock::new();
 
+/// Reserve the inference slot. Embeddings share it so a semantic search can
+/// never run concurrently with a completion and blow the memory budget.
+pub(crate) fn inference_slot() -> std::sync::MutexGuard<'static, ()> {
+    INFERENCE_GATE
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 // Model weights are immutable and LlamaModel is explicitly Send + Sync in the
-// binding. Retaining these two objects avoids a full GGUF load and CPU repack
-// for every question. Contexts remain request-scoped and serialised because
-// they hold mutable KV state.
-static BACKEND: OnceLock<std::result::Result<llama_cpp_2::llama_backend::LlamaBackend, String>> = OnceLock::new();
-static MODEL: OnceLock<std::result::Result<llama_cpp_2::model::LlamaModel, String>> = OnceLock::new();
+// binding. Retaining this object avoids a full GGUF load and CPU repack for
+// every question. Contexts remain request-scoped and serialised because they
+// hold mutable KV state. The backend is process-wide (see ai::shared_backend).
+static MODEL: OnceLock<std::result::Result<llama_cpp_2::model::LlamaModel, String>> =
+    OnceLock::new();
 
 #[derive(Clone, Copy)]
-enum CompletionMode { Default, DirectDocumentAnswer }
+enum CompletionMode {
+    Default,
+    DirectDocumentAnswer,
+}
 
 pub fn complete(
     model_path: &Path,
     system_prompt: &str,
     user_message: &str,
-    _grammar_gbnf: Option<&str>,
+    grammar_gbnf: Option<&str>,
     on_token: impl Fn(&str) -> bool,
 ) -> Result<String> {
-    complete_with_mode(model_path, system_prompt, user_message, CompletionMode::Default, on_token)
+    complete_with_mode(
+        model_path,
+        system_prompt,
+        user_message,
+        CompletionMode::Default,
+        grammar_gbnf,
+        on_token,
+    )
 }
 
 /// Document retrieval is an extraction task, not an open-ended reasoning task.
@@ -48,7 +67,14 @@ pub fn complete_document(
     user_message: &str,
     on_token: impl Fn(&str) -> bool,
 ) -> Result<String> {
-    complete_with_mode(model_path, system_prompt, user_message, CompletionMode::DirectDocumentAnswer, on_token)
+    complete_with_mode(
+        model_path,
+        system_prompt,
+        user_message,
+        CompletionMode::DirectDocumentAnswer,
+        None,
+        on_token,
+    )
 }
 
 fn complete_with_mode(
@@ -56,9 +82,12 @@ fn complete_with_mode(
     system_prompt: &str,
     user_message: &str,
     mode: CompletionMode,
+    grammar_gbnf: Option<&str>,
     on_token: impl Fn(&str) -> bool,
 ) -> Result<String> {
-    let _inference_slot = INFERENCE_GATE.get_or_init(|| Mutex::new(())).lock()
+    let _inference_slot = INFERENCE_GATE
+        .get_or_init(|| Mutex::new(()))
+        .lock()
         .map_err(|_| anyhow!("The local inference worker is unavailable"))?;
     let started = Instant::now();
     if !model_path.exists() {
@@ -67,25 +96,20 @@ fn complete_with_mode(
 
     use llama_cpp_2::{
         context::params::LlamaContextParams,
-        llama_backend::LlamaBackend,
         llama_batch::LlamaBatch,
         model::{params::LlamaModelParams, AddBos, LlamaModel},
         token::data_array::LlamaTokenDataArray,
     };
 
-    let backend = BACKEND.get_or_init(|| {
-        let mut backend = LlamaBackend::init().map_err(|error| error.to_string())?;
-        // llama.cpp emits a verbose tensor-by-tensor loading trace. Keep the
-        // terminal useful and retain our concise, actionable timing log below.
-        backend.void_logs();
-        Ok(backend)
-    })
-        .as_ref().map_err(|error| anyhow!("Failed to initialise chat backend: {error}"))?;
-    let model = MODEL.get_or_init(|| {
-        let model_params = LlamaModelParams::default();
-        LlamaModel::load_from_file(backend, model_path, &model_params)
-            .map_err(|error| format!("Failed to load chat model: {error}"))
-    }).as_ref().map_err(|error| anyhow!("{error}"))?;
+    let backend = crate::ai::shared_backend()?;
+    let model = MODEL
+        .get_or_init(|| {
+            let model_params = LlamaModelParams::default();
+            LlamaModel::load_from_file(backend, model_path, &model_params)
+                .map_err(|error| format!("Failed to load chat model: {error}"))
+        })
+        .as_ref()
+        .map_err(|error| anyhow!("{error}"))?;
 
     // Retrieval keeps prompts compact. Bound context/batches/threads so the
     // desktop app remains responsive and safely below its 2 GB RSS budget.
@@ -95,8 +119,22 @@ fn complete_with_mode(
         .with_n_ubatch(CHAT_UBATCH_TOKENS)
         .with_n_threads(CHAT_GENERATION_THREADS)
         .with_n_threads_batch(CHAT_PROMPT_THREADS);
-    let mut ctx = model.new_context(&backend, ctx_params)
+    let mut ctx = model
+        .new_context(&backend, ctx_params)
         .map_err(|e| anyhow!("Failed to create context: {e}"))?;
+
+    // Grammar-constrained sampling (AI spec §6.3): when a GBNF grammar is
+    // supplied, generation is restricted to strings the grammar accepts. The
+    // trailing greedy sampler then picks the highest-probability allowed token.
+    let mut sampler: Option<llama_cpp_2::sampling::LlamaSampler> = None;
+    if let Some(g) = grammar_gbnf {
+        let grammar = llama_cpp_2::sampling::LlamaSampler::grammar(model, g, "root")
+            .map_err(|e| anyhow!("Grammar init failed: {e}"))?;
+        sampler = Some(llama_cpp_2::sampling::LlamaSampler::chain(
+            [grammar, llama_cpp_2::sampling::LlamaSampler::greedy()],
+            false,
+        ));
+    }
 
     let prompt = format!(
         "<|im_start|>system\n{system_prompt}<|im_end|>\n\
@@ -108,7 +146,8 @@ fn complete_with_mode(
         CompletionMode::DirectDocumentAnswer => format!("{prompt}<think>\n\n</think>\n\n"),
     };
 
-    let mut tokens = model.str_to_token(&prompt, AddBos::Always)
+    let mut tokens = model
+        .str_to_token(&prompt, AddBos::Always)
         .map_err(|e| anyhow!("Tokenization failed: {e}"))?;
 
     let n_ctx = ctx.n_ctx() as usize;
@@ -119,7 +158,9 @@ fn complete_with_mode(
     if tokens.len() >= n_ctx.saturating_sub(512) {
         let limit = n_ctx.saturating_sub(512);
         let prefix_len = limit.min(512).min(tokens.len());
-        let suffix_len = limit.saturating_sub(prefix_len).min(tokens.len().saturating_sub(prefix_len));
+        let suffix_len = limit
+            .saturating_sub(prefix_len)
+            .min(tokens.len().saturating_sub(prefix_len));
         let mut compressed = tokens[..prefix_len].to_vec();
         compressed.extend_from_slice(&tokens[tokens.len() - suffix_len..]);
         tokens = compressed;
@@ -136,7 +177,8 @@ fn complete_with_mode(
         let offset = chunk_index * BATCH_SIZE;
         for (index, token) in token_chunk.iter().enumerate() {
             let position = offset + index;
-            batch.add(*token, position as i32, &[0], position as i32 == last_idx)
+            batch
+                .add(*token, position as i32, &[0], position as i32 == last_idx)
                 .map_err(|e| anyhow!("Batch add: {e}"))?;
         }
         ctx.decode(&mut batch).map_err(|e| anyhow!("Decode: {e}"))?;
@@ -151,26 +193,40 @@ fn complete_with_mode(
     let mut decoder = encoding_rs::UTF_8.new_decoder();
 
     loop {
-        let candidates = ctx.candidates_ith(batch.n_tokens() - 1);
-        let mut candidates_p = LlamaTokenDataArray::from_iter(candidates, false);
-        let new_token = candidates_p.sample_token_greedy();
+        let new_token = match sampler.as_mut() {
+            // Grammar path: the sampler builds candidates from the context
+            // logits itself, applies the grammar, and records the accept step
+            // that keeps its state machine in sync.
+            Some(s) => s.sample(&ctx, batch.n_tokens() - 1),
+            None => {
+                let candidates = ctx.candidates_ith(batch.n_tokens() - 1);
+                let mut candidates_p = LlamaTokenDataArray::from_iter(candidates, false);
+                candidates_p.sample_token_greedy()
+            }
+        };
 
-        if new_token == eos || generated >= n_predict || n_cur >= n_ctx as i32 { break; }
+        if new_token == eos || generated >= n_predict || n_cur >= n_ctx as i32 {
+            break;
+        }
 
-        let piece = model.token_to_piece(new_token, &mut decoder, false, None)
+        let piece = model
+            .token_to_piece(new_token, &mut decoder, false, None)
             .map_err(|e| anyhow!("token_to_piece: {e}"))?;
 
         if first_token_elapsed_ms.is_none() {
             first_token_elapsed_ms = Some(started.elapsed().as_millis());
         }
         output.push_str(&piece);
-        if !on_token(&piece) { break; }
+        if !on_token(&piece) {
+            break;
+        }
         if identity_guard::buffer_has_leak(&output) {
             return Ok(identity_guard::canned().to_string());
         }
 
         batch.clear();
-        batch.add(new_token, n_cur, &[0], true)
+        batch
+            .add(new_token, n_cur, &[0], true)
             .map_err(|e| anyhow!("Batch add: {e}"))?;
         ctx.decode(&mut batch).map_err(|e| anyhow!("Decode: {e}"))?;
         n_cur += 1;
@@ -212,7 +268,10 @@ mod tests {
 
     #[test]
     fn thinking_output_is_not_returned_for_document_answers() {
-        assert_eq!(strip_thinking("<think>private work</think>Answer."), "Answer.");
+        assert_eq!(
+            strip_thinking("<think>private work</think>Answer."),
+            "Answer."
+        );
         assert_eq!(strip_thinking("Direct answer."), "Direct answer.");
     }
 
@@ -224,21 +283,37 @@ mod tests {
     fn benchmark_user_documents() {
         let model = PathBuf::from(std::env::var("SOFFIT_AI_MODEL").expect("set SOFFIT_AI_MODEL"));
         let documents = [
-            ("SOFFIT_AI_BENCHMARK_DOC_ONE", "Explain this document simply."),
-            ("SOFFIT_AI_BENCHMARK_DOC_TWO", "What are the key service obligations and commercial terms?"),
+            (
+                "SOFFIT_AI_BENCHMARK_DOC_ONE",
+                "Explain this document simply.",
+            ),
+            (
+                "SOFFIT_AI_BENCHMARK_DOC_TWO",
+                "What are the key service obligations and commercial terms?",
+            ),
         ];
 
         for (variable, question) in documents {
-            let Ok(path) = std::env::var(variable) else { continue; };
+            let Ok(path) = std::env::var(variable) else {
+                continue;
+            };
             let document = pdf_extract::extract_text(&path).expect("extract PDF text");
             // Match production's prompt budget. The current implementation
             // ranks a longer document before applying this bound.
             let excerpt: String = document.chars().take(3_600).collect();
-            let name = PathBuf::from(&path).file_name().unwrap().to_string_lossy().to_string();
+            let name = PathBuf::from(&path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
             let system = prompts::document_chat(&name, &excerpt);
             let started = Instant::now();
-            let answer = complete_document(&model, &system, question, |_| true).expect("complete document");
-            eprintln!("[ai-benchmark] file={name} elapsed_ms={} answer={answer}", started.elapsed().as_millis());
+            let answer =
+                complete_document(&model, &system, question, |_| true).expect("complete document");
+            eprintln!(
+                "[ai-benchmark] file={name} elapsed_ms={} answer={answer}",
+                started.elapsed().as_millis()
+            );
             assert!(!answer.is_empty());
         }
     }

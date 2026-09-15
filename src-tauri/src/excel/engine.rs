@@ -43,10 +43,14 @@ pub struct SheetData {
 pub fn open_workbook(path: &Path) -> Result<Vec<SheetInfo>> {
     let book = umya_spreadsheet::reader::xlsx::read(path)
         .map_err(|e| anyhow!("Failed to open: {:?}", e))?;
-    let sheets = book.sheet_collection()
+    let sheets = book
+        .sheet_collection()
         .iter()
         .enumerate()
-        .map(|(i, s)| SheetInfo { index: i, name: s.name().to_string() })
+        .map(|(i, s)| SheetInfo {
+            index: i,
+            name: s.name().to_string(),
+        })
         .collect();
     Ok(sheets)
 }
@@ -55,7 +59,8 @@ pub fn get_sheet_data(path: &Path, sheet_index: usize) -> Result<SheetData> {
     let book = umya_spreadsheet::reader::xlsx::read(path)
         .map_err(|e| anyhow!("Failed to open: {:?}", e))?;
 
-    let sheet = book.sheet(sheet_index)
+    let sheet = book
+        .sheet(sheet_index)
         .map_err(|e| anyhow!("Sheet {} not found: {:?}", sheet_index, e))?;
 
     let sheet_name = sheet.name().to_string();
@@ -122,7 +127,9 @@ pub fn get_sheet_data(path: &Path, sheet_index: usize) -> Result<SheetData> {
         .iter()
         .filter_map(|cd| {
             let idx = cd.col_num(); // 1-based
-            if idx == 0 || idx > col_limit { return None; }
+            if idx == 0 || idx > col_limit {
+                return None;
+            }
             let w = cd.width();
             if w > 0.0 {
                 Some((idx - 1, w * 7.0))
@@ -138,7 +145,9 @@ pub fn get_sheet_data(path: &Path, sheet_index: usize) -> Result<SheetData> {
         .iter()
         .filter_map(|rd| {
             let r = rd.row_num(); // 1-based
-            if r == 0 || r > row_limit { return None; }
+            if r == 0 || r > row_limit {
+                return None;
+            }
             let h = rd.height();
             if h > 0.0 {
                 Some((r - 1, h * 1.333))
@@ -164,7 +173,8 @@ pub fn set_cell(path: &Path, sheet_index: usize, row: u32, col: u32, value: &str
         .map_err(|e| anyhow!("Failed to open: {:?}", e))?;
 
     {
-        let sheet = book.sheet_mut(sheet_index)
+        let sheet = book
+            .sheet_mut(sheet_index)
             .map_err(|e| anyhow!("Sheet {} not found: {:?}", sheet_index, e))?;
         sheet.cell_mut((col, row)).set_value(value);
     }
@@ -179,7 +189,9 @@ pub fn set_cell(path: &Path, sheet_index: usize, row: u32, col: u32, value: &str
 /// Parse a merge range like "A1:C3" into a MergeCell (0-based)
 fn parse_merge_range(range: &str) -> Option<MergeCell> {
     let parts: Vec<&str> = range.split(':').collect();
-    if parts.len() != 2 { return None; }
+    if parts.len() != 2 {
+        return None;
+    }
     let (sc, sr) = parse_cell_ref(parts[0])?;
     let (ec, er) = parse_cell_ref(parts[1])?;
     Some(MergeCell {
@@ -197,7 +209,9 @@ fn parse_cell_ref(s: &str) -> Option<(u32, u32)> {
     let row_part: String = s.chars().skip_while(|c| c.is_ascii_alphabetic()).collect();
     let col = column_label_to_index(&col_part) as u32;
     let row: u32 = row_part.parse().ok()?;
-    if col == 0 || row == 0 { return None; }
+    if col == 0 || row == 0 {
+        return None;
+    }
     Some((col, row))
 }
 

@@ -10,7 +10,9 @@ pub fn init_db(db_path: &Path) -> Result<Connection> {
     Ok(conn)
 }
 
-fn create_tables(conn: &Connection) -> Result<()> {    conn.execute_batch("
+fn create_tables(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS users (
             id          TEXT PRIMARY KEY,
             username    TEXT NOT NULL UNIQUE,
@@ -76,6 +78,11 @@ fn create_tables(conn: &Connection) -> Result<()> {    conn.execute_batch("
             content_hash TEXT,
             file_kind   TEXT NOT NULL DEFAULT 'generic',
             sync_status TEXT NOT NULL DEFAULT 'synced',
+            -- Hash of the content this device last accepted from a peer for
+            -- this file. Stays untouched by local re-indexing, so comparing it
+            -- with the on-disk hash tells an untouched replica apart from a
+            -- diverged local edit.
+            synced_hash TEXT,
             UNIQUE(share_id, relative_path)
         );
 
@@ -91,7 +98,8 @@ fn create_tables(conn: &Connection) -> Result<()> {    conn.execute_batch("
             key         TEXT PRIMARY KEY,
             value       TEXT NOT NULL
         );
-    ")?;
+    ",
+    )?;
     Ok(())
 }
 
@@ -100,25 +108,33 @@ fn create_tables(conn: &Connection) -> Result<()> {    conn.execute_batch("
 /// "ADD COLUMN IF NOT EXISTS" before version 3.37.
 fn run_migrations(conn: &Connection) -> Result<()> {
     // shares: add selective_sync if missing
-    conn.execute_batch(
-        "ALTER TABLE shares ADD COLUMN selective_sync INTEGER NOT NULL DEFAULT 0;"
-    ).ok(); // .ok() = ignore error if column already exists
+    conn.execute_batch("ALTER TABLE shares ADD COLUMN selective_sync INTEGER NOT NULL DEFAULT 0;")
+        .ok(); // .ok() = ignore error if column already exists
 
     // peers: add endpoint_addr if missing
-    conn.execute_batch(
-        "ALTER TABLE peers ADD COLUMN endpoint_addr TEXT;"
-    ).ok();
+    conn.execute_batch("ALTER TABLE peers ADD COLUMN endpoint_addr TEXT;")
+        .ok();
 
     // file_index: add content_hash if missing (older schema may not have it)
-    conn.execute_batch(
-        "ALTER TABLE file_index ADD COLUMN content_hash TEXT;"
-    ).ok();
+    conn.execute_batch("ALTER TABLE file_index ADD COLUMN content_hash TEXT;")
+        .ok();
+
+    // file_index: remember the hash last accepted from a peer so a replica can
+    // be updated in place while a diverged local edit still wins.
+    conn.execute_batch("ALTER TABLE file_index ADD COLUMN synced_hash TEXT;")
+        .ok();
+
+    // shares: remember which peer device granted a received share, so its
+    // files can be pulled on demand (pull-mode selective sync).
+    conn.execute_batch("ALTER TABLE shares ADD COLUMN owner_node_id TEXT;")
+        .ok();
 
     Ok(())
 }
 
 pub fn ensure_extra_tables(conn: &Connection) -> Result<()> {
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS file_history (
             id          TEXT PRIMARY KEY,
             file_path   TEXT NOT NULL,
@@ -135,6 +151,7 @@ pub fn ensure_extra_tables(conn: &Connection) -> Result<()> {
             file_kind   TEXT NOT NULL DEFAULT 'generic',
             added_at    TEXT NOT NULL
         );
-    ")?;
+    ",
+    )?;
     Ok(())
 }

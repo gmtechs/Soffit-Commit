@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { listen } from "@tauri-apps/api/event";
 import {
   listShares, listFiles, createShare, deleteShare,
   refreshShare, setSelectiveSync,
@@ -67,6 +68,22 @@ export function FilesPage() {
   const loadFavourites = () => getFavourites().then(setFavourites).catch(() => {});
 
   useEffect(() => { loadShares(); loadHistory(); loadFavourites(); }, []);
+
+  // Live refresh: when a share is granted or files sync in from a peer,
+  // reload the share list and the selected share's files.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen("app://sync-event", (event) => {
+      const e = event.payload as { event?: string; share_id?: string };
+      if (e?.event === "share_granted" || e?.event === "sync_complete") {
+        loadShares();
+        if (selected && e.share_id === selected.id) {
+          listFiles(selected.id).then(f => setFiles(f)).catch(() => {});
+        }
+      }
+    }).then((fn) => { unlisten = fn; }).catch(() => {});
+    return () => { if (unlisten) unlisten(); };
+  }, [selected]);
 
   useEffect(() => {
     if (selected) listFiles(selected.id).then(setFiles).catch(() => {});
@@ -278,12 +295,6 @@ export function FilesPage() {
                             {f.file_kind === "excel" && (
                               <button onClick={() => { setPendingFile({ path: `${selected.path}/${f.relative_path}`, kind: "excel" }); navigate("/excel"); }} title="Open in Excel mode"
                                 style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-success)" }}>
-                                <ExternalLink size={13} />
-                              </button>
-                            )}
-                            {["sql","csv","parquet","sqlite"].includes(f.file_kind) && (
-                              <button onClick={() => { setPendingFile({ path: `${selected.path}/${f.relative_path}`, kind: f.file_kind as any }); navigate("/sql"); }} title="Open in SQL console"
-                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-info)" }}>
                                 <ExternalLink size={13} />
                               </button>
                             )}

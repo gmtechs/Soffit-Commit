@@ -16,7 +16,7 @@ const navItems = [
 ];
 
 const secondaryItems = [
-  { to: "/settings", icon: <Settings size={18} />,   label: "Settings" },
+  { to: "/settings", icon: <Settings size={18} />,  label: "Settings"    },
 ];
 
 export function Sidebar() {
