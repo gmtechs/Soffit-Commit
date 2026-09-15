@@ -8,14 +8,13 @@ Download the current version from the [latest GitHub release](https://github.com
 
 | Platform | Release asset | Download |
 | --- | --- | --- |
-| Windows x64 | `.exe` setup installer | [Download for Windows](https://github.com/gmtechs/Soffit-Commit/releases/tag/app-v0.1.4) — recommended for most PCs. |
-| Windows x64 | `.msi` installer | [Download for managed PCs](https://github.com/gmtechs/Soffit-Commit/releases/tag/app-v0.1.4). |
-| Linux x64 | `.AppImage` | [Download for Linux](https://github.com/gmtechs/Soffit-Commit/releases/tag/app-v0.1.4) — make it executable, then open it. |
-| Debian/Ubuntu x64 | `.deb` package | [Download the Debian package](https://github.com/gmtechs/Soffit-Commit/releases/tag/app-v0.1.4). |
-| macOS Intel | `x64.dmg` | [Download for Intel Macs](https://github.com/gmtechs/Soffit-Commit/releases/tag/app-v0.1.4). |
-| macOS Apple silicon | `aarch64.dmg` | [Download for M-series Macs](https://github.com/gmtechs/Soffit-Commit/releases/tag/app-v0.1.4). |
+| Windows x64 | `Soffit.Commit_0.1.4_x64-setup.exe` setup installer — recommended for most PCs | [Download for Windows](https://github.com/gmtechs/Soffit-Commit/releases/download/app-v0.1.4/Soffit.Commit_0.1.4_x64-setup.exe) |
+| Windows x64 | `Soffit.Commit_0.1.4_x64_en-US.msi` installer for managed PCs | [Download the MSI installer](https://github.com/gmtechs/Soffit-Commit/releases/download/app-v0.1.4/Soffit.Commit_0.1.4_x64_en-US.msi) |
+| Linux x64 | `Soffit.Commit_0.1.4_amd64.AppImage` — make it executable, then open it | [Download for Linux](https://github.com/gmtechs/Soffit-Commit/releases/download/app-v0.1.4/Soffit.Commit_0.1.4_amd64.AppImage) |
+| Debian/Ubuntu x64 | `Soffit.Commit_0.1.4_amd64.deb` package | [Download the Debian package](https://github.com/gmtechs/Soffit-Commit/releases/download/app-v0.1.4/Soffit.Commit_0.1.4_amd64.deb) |
+| macOS Apple silicon | `Soffit.Commit_0.1.4_aarch64.dmg` for M-series Macs | [Download for Apple silicon Macs](https://github.com/gmtechs/Soffit-Commit/releases/download/app-v0.1.4/Soffit.Commit_0.1.4_aarch64.dmg) |
 
-> Releases are assembled as drafts. Open the draft on GitHub, confirm all six assets are present, then publish it. Windows and macOS installers are not code-signed in this repository yet, so the operating system may show a trust warning. Add signing credentials before distributing to end users.
+> The Intel macOS (`.dmg`) build was still queued when this README was updated, so it is not listed above. It will appear on the [app-v0.1.4 release page](https://github.com/gmtechs/Soffit-Commit/releases/tag/app-v0.1.4) once its GitHub Actions job finishes. Windows and macOS installers are not code-signed in this repository yet, so the operating system may show a trust warning. Add signing credentials before distributing to end users.
 
 ## Release builds
 
