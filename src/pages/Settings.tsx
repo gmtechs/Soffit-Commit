@@ -6,10 +6,11 @@ import { Button } from "../components/ui/Button";
 import { useToast } from "../components/ui/Toast";
 import { useAuthStore } from "../store/auth";
 import { HelpPage } from "./Help";
+import { applyTheme, useTheme } from "../lib/theme";
 import { AboutPage } from "./About";
 
 export function SettingsPage() {
-  const [theme, setTheme] = useState("light");
+  const theme = useTheme();
   const [lockTimeout, setLockTimeout] = useState("15");
   const [peers, setPeers] = useState<Peer[]>([]);
   const [nodeId, setNodeId] = useState<string | null>(null);
@@ -17,8 +18,7 @@ export function SettingsPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    getSetting("theme").then(v => { if (v) { setTheme(v); document.documentElement.setAttribute("data-theme", v); } });
-    getSetting("lock_timeout_minutes").then(v => { if (v) setLockTimeout(v); });
+    getSetting("lock_timeout_minutes").then(v => { if (v) setLockTimeout(v); }).catch(() => {});
     listPeers().then(setPeers).catch(() => {});
     getNodeId().then(setNodeId).catch(() => {});
   }, []);
@@ -27,7 +27,7 @@ export function SettingsPage() {
     try {
       await setSetting("theme", theme);
       await setSetting("lock_timeout_minutes", lockTimeout);
-      document.documentElement.setAttribute("data-theme", theme);
+      applyTheme(theme);
       toast("success", "Settings saved");
     } catch (err: any) { toast("danger", String(err)); }
   };
@@ -69,9 +69,9 @@ export function SettingsPage() {
           {theme === "dark" ? <Moon size={16} /> : <Sun size={16} />} Appearance
         </h2>
         <div style={{ display: "flex", gap: 10 }}>
-          {["light", "dark"].map(t => (
-            <button key={t} onClick={() => { setTheme(t); document.documentElement.setAttribute("data-theme", t); }}
-              style={{ padding: "8px 20px", borderRadius: 8, border: `2px solid ${theme === t ? "var(--color-primary)" : "var(--color-border)"}`, background: theme === t ? "#FEF3E2" : "var(--color-bg)", color: theme === t ? "var(--color-primary)" : "var(--color-ink)", fontWeight: 500, fontSize: 13, cursor: "pointer" }}>
+          {(["dark", "light"] as const).map(t => (
+            <button key={t} onClick={() => applyTheme(t)}
+              style={{ padding: "8px 20px", borderRadius: 8, border: `2px solid ${theme === t ? "var(--color-primary)" : "var(--color-border)"}`, background: theme === t ? "var(--accent-glow)" : "var(--color-bg)", color: theme === t ? "var(--color-primary)" : "var(--color-ink)", fontWeight: 500, fontSize: 13, cursor: "pointer" }}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}

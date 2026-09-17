@@ -33,7 +33,7 @@ export function Sidebar() {
 
   const W = collapsed ? 64 : 240;
 
-  // Active state: 2px left-border accent + faint tint, ink text (no orange fill)
+  // Active state: blue left-border accent, faint tint, and high-contrast text.
   const navStyle = (isActive: boolean): React.CSSProperties => ({
     display: "flex",
     alignItems: "center",

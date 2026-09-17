@@ -208,7 +208,7 @@ export function PeersPage() {
                             <select
                               value={permMap[`${p.id}:${s.id}`] ?? "none"}
                               onChange={e => handlePermission(p.id, s.id, s.display_name, e.target.value)}
-                              style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 999, border: "none", cursor: "pointer", background: (permMap[`${p.id}:${s.id}`] ?? "none") === "edit" ? "rgba(59, 107, 255, 0.16)" : (permMap[`${p.id}:${s.id}`] ?? "none") === "view" ? "rgba(232, 178, 74, 0.16)" : "transparent", color: (permMap[`${p.id}:${s.id}`] ?? "none") === "edit" ? "var(--color-primary)" : (permMap[`${p.id}:${s.id}`] ?? "none") === "view" ? "var(--color-warning)" : "var(--color-text-muted)" }}
+                              style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 999, border: "none", cursor: "pointer", background: (permMap[`${p.id}:${s.id}`] ?? "none") === "edit" ? "rgba(59, 107, 255, 0.16)" : (permMap[`${p.id}:${s.id}`] ?? "none") === "view" ? "rgba(250, 204, 21, 0.16)" : "transparent", color: (permMap[`${p.id}:${s.id}`] ?? "none") === "edit" ? "var(--color-primary)" : (permMap[`${p.id}:${s.id}`] ?? "none") === "view" ? "var(--color-warning)" : "var(--color-text-muted)" }}
                             >
                               <option value="none">No access</option>
                               <option value="view">View</option>

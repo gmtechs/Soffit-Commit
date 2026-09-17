@@ -5,7 +5,7 @@ const config: Record<SyncStatus, { tint: string; dot: string; label: string }> =
   synced:   { tint: "rgba(52, 211, 153, 0.12)", dot: "var(--color-success)", label: "Synced"   },
   syncing:  { tint: "rgba(59, 107, 255, 0.12)", dot: "var(--color-info)",    label: "Syncing"  },
   conflict: { tint: "rgba(255, 92, 92, 0.12)",  dot: "var(--color-danger)",  label: "Conflict" },
-  locked:   { tint: "rgba(232, 178, 74, 0.12)", dot: "var(--color-warning)", label: "Locked"   },
+  locked:   { tint: "rgba(250, 204, 21, 0.12)", dot: "var(--color-warning)", label: "Locked"   },
   pending:  { tint: "var(--color-surface-raised)", dot: "var(--color-text-muted)", label: "Pending" },
 };
 

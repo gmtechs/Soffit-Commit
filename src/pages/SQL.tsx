@@ -173,7 +173,7 @@ function ResultsGrid({ result, onApplyEdit }: { result: QueryResult; onApplyEdit
                         const v = e.currentTarget.textContent ?? "";
                         if (v !== String(cell ?? "")) setEditedCells(p => ({ ...p, [key]: v }));
                       }}
-                      style={{ padding: "6px 10px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: isEdited ? "rgba(226,113,0,0.06)" : "transparent", outline: "none" }}>
+                      style={{ padding: "6px 10px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: isEdited ? "var(--accent-glow)" : "transparent", outline: "none" }}>
                       {cell === null ? <span style={{ color: "var(--color-text-muted)" }}>NULL</span> : String(cell)}
                     </td>
                   );

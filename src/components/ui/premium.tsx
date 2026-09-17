@@ -69,7 +69,7 @@ export function StatusChip({ tone, children, pulse }: {
     green: { bg: "rgba(52, 211, 153, 0.13)", fg: "var(--color-success)", dot: "var(--color-success)" },
     blue:  { bg: "rgba(59, 107, 255, 0.13)",  fg: "var(--color-primary)", dot: "var(--color-primary)" },
     red:   { bg: "rgba(255, 92, 92, 0.13)",   fg: "var(--color-danger)",  dot: "var(--color-danger)" },
-    amber: { bg: "rgba(232, 178, 74, 0.14)",  fg: "var(--color-warning)", dot: "var(--color-warning)" },
+    amber: { bg: "rgba(250, 204, 21, 0.14)",  fg: "var(--color-warning)", dot: "var(--color-warning)" },
     gray:  { bg: "var(--color-surface-raised)", fg: "var(--color-text-secondary)", dot: "var(--color-text-muted)" },
   };
   const t = tones[tone];
@@ -97,7 +97,7 @@ export function IconTile({ children, tone = "blue", size = 34 }: {
     blue:   { bg: "rgba(59, 107, 255, 0.13)",  fg: "var(--color-primary)" },
     green:  { bg: "rgba(52, 211, 153, 0.13)",  fg: "var(--color-success)" },
     violet: { bg: "rgba(139, 92, 246, 0.15)",  fg: "#A78BFA" },
-    amber:  { bg: "rgba(232, 178, 74, 0.15)",  fg: "var(--color-warning)" },
+    amber:  { bg: "rgba(250, 204, 21, 0.15)",  fg: "var(--color-warning)" },
     red:    { bg: "rgba(255, 92, 92, 0.13)",   fg: "var(--color-danger)" },
     gray:   { bg: "var(--color-surface-raised)", fg: "var(--color-text-secondary)" },
   };

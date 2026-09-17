@@ -2,17 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { getSetting } from "./lib/tauri";
+import { initializeTheme } from "./lib/theme";
 
-// Apply persisted theme before first render
-getSetting("theme").then(t => {
-  if (t) document.documentElement.setAttribute("data-theme", t);
-}).catch(() => {
-  // Fallback to OS preference
-  if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    document.documentElement.setAttribute("data-theme", "dark");
-  }
-});
+// The HTML shell applies the cached preference before paint; migrate native settings once.
+void initializeTheme();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

@@ -1,27 +1,39 @@
 :root {
-  --color-primary: #E27100;
-  --color-ink: #2D2C2A;
-  --color-bg: #F4F3F0;
-  --color-surface: #FFFFFF;
-  --color-border: #E9E7E2;
-  --color-text-secondary: #6E6D68;
-  --color-text-muted: #A6A49D;
-  --color-success: #16A34A;
-  --color-danger: #DC2626;
-  --color-info: #3B82F6;
-  --color-warning: #F59E0B;
-  --radius-card: 8px;
-  --radius-control: 6px;
-  --shadow-card: none;
+  color-scheme: dark;
+  --color-primary: #3B6BFF;
+  --color-focus: #2B4CFF;
+  --color-ink: #F5F6FA;
+  --color-bg: #0A0B0F;
+  --color-surface: #121319;
+  --color-surface-raised: #181A22;
+  --color-border: #23252F;
+  --color-text-secondary: #9497A8;
+  --color-text-muted: #5C5F70;
+  --color-success: #22C55E;
+  --color-danger: #FF5C5C;
+  --color-info: #3B6BFF;
+  --color-warning: #FACC15;
+  --accent-gradient: linear-gradient(135deg, #3B6BFF, #2B4CFF);
+  --accent-glow: rgba(59, 107, 255, 0.14);
+  --font-mono: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.12);
 }
 
-[data-theme="dark"] {
-  --color-bg: #1C1B19;
-  --color-surface: #252422;
-  --color-border: #3A3835;
-  --color-ink: #F0EFEB;
-  --color-text-secondary: #A6A49D;
-  --color-text-muted: #6E6D68;
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-primary: #2B4CFF;
+  --color-bg: #F4F5F8;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #EBEDF3;
+  --color-border: #E4E6EC;
+  --color-ink: #16181D;
+  --color-text-secondary: #5A5E6B;
+  --color-text-muted: #747887;
+  --color-success: #15803D;
+  --color-danger: #DC2626;
+  --color-warning: #856400;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -38,5 +50,11 @@ html, body, #root {
 button { font-family: inherit; cursor: pointer; }
 input, select, textarea { font-family: inherit; }
 a { color: inherit; text-decoration: none; }
+code, pre, kbd, samp { font-family: var(--font-mono); }
+h1 { font-size: 28px; line-height: 1.2; letter-spacing: -0.03em; }
+h2 { font-size: 20px; line-height: 1.3; letter-spacing: -0.02em; }
+h3 { font-size: 16px; line-height: 1.4; }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+::selection { background: var(--color-focus); color: #FFFFFF; }
 
 @keyframes soffit-spin { to { transform: rotate(360deg); } }

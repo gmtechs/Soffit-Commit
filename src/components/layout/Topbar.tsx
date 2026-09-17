@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Search, Sun, Moon, X, ChevronDown, User, Link2, Bell, LayoutGrid, Settings, Users } from "lucide-react";
 import { useAuthStore } from "../../store/auth";
-import { getNodeId, getSetting, setSetting, search, listPeers, listConflicts, listActivity, type SearchResult } from "../../lib/tauri";
+import { applyTheme, useTheme } from "../../lib/theme";
+import { getNodeId, setSetting, search, listPeers, listConflicts, listActivity, type SearchResult } from "../../lib/tauri";
 
 const ROUTE_LABELS: Record<string, string> = {
   "/":          "Home",
@@ -28,7 +29,7 @@ export function Topbar() {
   const initials = name.slice(0, 2).toUpperCase();
 
   const [nodeId, setNodeId] = useState<string | null>(null);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const theme = useTheme();
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [peerResults, setPeerResults] = useState<{ id: string; display_name: string }[]>([]);
@@ -73,11 +74,6 @@ export function Topbar() {
 
   useEffect(() => {
     getNodeId().then(setNodeId).catch(() => {});
-    getSetting("theme").then(t => {
-      const val = (t ?? "light") as "light" | "dark";
-      setTheme(val);
-      document.documentElement.setAttribute("data-theme", val);
-    }).catch(() => {});
   }, []);
 
   // Close dropdowns on outside click
@@ -99,10 +95,7 @@ export function Topbar() {
 
   const toggleTheme = async () => {
     const next = theme === "light" ? "dark" : "light";
-    setTheme(next);
-    document.documentElement.setAttribute("data-theme", next);
-    // Persist to localStorage for zero-flash on next launch
-    try { localStorage.setItem("soffit-theme", next); } catch {}
+    applyTheme(next);
     await setSetting("theme", next).catch(() => {});
   };
 
