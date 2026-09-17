@@ -58,3 +58,31 @@ h3 { font-size: 16px; line-height: 1.4; }
 ::selection { background: var(--color-focus); color: #FFFFFF; }
 
 @keyframes soffit-spin { to { transform: rotate(360deg); } }
+
+.dashboard-primary { grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); }
+.dashboard-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dashboard-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dashboard-primary > *, .dashboard-kpis > *, .dashboard-secondary > * { min-width: 0; }
+.dashboard-health {
+  padding: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: radial-gradient(ellipse at 50% 55%, var(--accent-glow), transparent 70%), var(--color-surface);
+}
+.dashboard-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+.dashboard-health-arc { transition: stroke-dashoffset 700ms ease; }
+@media (max-width: 1200px) {
+  .dashboard-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .dashboard-primary, .dashboard-secondary { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-health-arc { transition: none; }
+}

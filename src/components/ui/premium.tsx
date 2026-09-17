@@ -35,7 +35,7 @@ export function AnimatedRing({ pct, size = 120, stroke = 10, track }: {
   pct: number; size?: number; stroke?: number; track: string;
 }) {
   const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
+  const c = Math.PI * r;
   const target = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
   const gid = React.useId();
   return (
@@ -55,8 +55,8 @@ export function AnimatedRing({ pct, size = 120, stroke = 10, track }: {
       <path d={`M ${stroke / 2} ${size / 2} A ${r} ${r} 0 0 1 ${size - stroke / 2} ${size / 2}`}
         fill="none" stroke={`url(#${gid})`}
         strokeWidth={stroke} strokeLinecap="round"
-        strokeDasharray={c} strokeDashoffset={target}
-        style={{ animation: "soffit-ring-sweep 1.1s cubic-bezier(0.22, 1, 0.36, 1)" }} />
+        className="dashboard-health-arc" strokeDasharray={c} strokeDashoffset={target}
+        opacity={pct <= 0 ? 0 : 1} />
     </svg>
   );
 }

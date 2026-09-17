@@ -4,6 +4,7 @@ import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recha
 import { dashboardStats, type DashboardStats } from "../lib/tauri";
 import { StatCard } from "../components/ui/StatCard";
 import { SyncProgressPanel } from "../components/ui/StatusBar";
+import { AnimatedRing, CountUp, StatusChip } from "../components/ui/premium";
 
 function formatBytes(b: number) {
   if (b >= 1e9) return (b / 1e9).toFixed(1) + " GB";
@@ -25,52 +26,51 @@ export function DashboardPage() {
   const s = stats;
   const pieData = s
     ? [
-        { name: "Excel", value: s.file_type_breakdown.excel || 1 },
-        { name: "SQL", value: s.file_type_breakdown.sql || 1 },
-        { name: "Other", value: s.file_type_breakdown.other || 1 },
+        { name: "Excel", value: s.file_type_breakdown.excel },
+        { name: "SQL", value: s.file_type_breakdown.sql },
+        { name: "Other", value: s.file_type_breakdown.other },
       ]
     : [];
-  const COLORS = ["#4F86C6", "var(--color-success)", "#8B8B8B"];
+  const COLORS = ["#3B6BFF", "#06B6D4", "#8B5CF6"];
+  const totalFiles = pieData.reduce((total, entry) => total + entry.value, 0);
 
-  const cardGrid: React.CSSProperties = { display: "grid", gap: 20 };
+  const cardGrid: React.CSSProperties = { display: "grid", gap: 16 };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Row 1: stat cards */}
-      <div style={{ ...cardGrid, gridTemplateColumns: "1fr 1fr 2fr" }}>
-        <StatCard icon={<HardDrive size={18} />} title="Storage used" value={s ? formatBytes(s.storage_used_bytes) : "—"} delta={s?.storage_delta_pct ?? 0} detailsLink={() => navigate("/files")} />
-        <StatCard icon={<RefreshCw size={18} />} title="Files synced" value={s ? String(s.files_synced) : "—"} delta={s?.files_synced_delta_pct ?? 0} detailsLink={() => navigate("/files")} />
+    <div className="dashboard" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="dashboard-primary" style={cardGrid}>
+        <section className="dashboard-health" aria-label="Sync health">
+          <p className="dashboard-eyebrow">Workspace overview</p>
+          <h2 style={{ fontSize: 18, marginTop: 6 }}>Sync health</h2>
+          <div style={{ position: "relative", width: 180, margin: "24px auto 12px" }}>
+            <AnimatedRing pct={s?.sync_health_percent ?? 0} size={180} stroke={12} track="var(--color-border)" />
+            <div style={{ position: "absolute", bottom: 8, width: "100%", textAlign: "center", fontSize: 38, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+              {s ? <CountUp value={s.sync_health_percent} format={n => `${Math.round(n)}%`} /> : "—"}
+            </div>
+          </div>
+          <p style={{ textAlign: "center", color: "var(--color-text-secondary)", fontSize: 12 }}>Shares fully up to date</p>
+          <div style={{ textAlign: "center", marginTop: 14 }}>
+            <StatusChip tone={!s ? "gray" : s.sync_health_percent >= 100 ? "green" : "blue"}>
+              {!s ? "Loading overview" : s.sync_health_percent >= 100 ? "Up to date" : "Sync in progress"}
+            </StatusChip>
+          </div>
+        </section>
         <SyncProgressPanel />
       </div>
 
-      {/* Row 2: more stats */}
-      <div style={{ ...cardGrid, gridTemplateColumns: "1fr 1fr" }}>
-        <StatCard icon={<FileEdit size={18} />} title="Files edited this month" value={s ? String(s.files_edited_this_month) : "—"} delta={s?.files_edited_delta_pct ?? 0} />
-        <StatCard icon={<AlertTriangle size={18} />} title="Conflicts resolved" value={s ? String(s.conflicts_resolved) : "—"} delta={s?.conflicts_delta_pct ?? 0} />
+      <div className="dashboard-kpis" style={cardGrid}>
+        <StatCard icon={<HardDrive size={18} />} title="Storage used" value={s ? formatBytes(s.storage_used_bytes) : "—"} delta={s?.storage_delta_pct} detailsLink={() => navigate("/files")} />
+        <StatCard icon={<RefreshCw size={18} />} title="Files synced" value={s ? String(s.files_synced) : "—"} delta={s?.files_synced_delta_pct} detailsLink={() => navigate("/files")} />
+        <StatCard icon={<FileEdit size={18} />} title="Files edited this month" value={s ? String(s.files_edited_this_month) : "—"} delta={s?.files_edited_delta_pct} />
+        <StatCard icon={<AlertTriangle size={18} />} title="Conflicts resolved" value={s ? String(s.conflicts_resolved) : "—"} delta={s?.conflicts_delta_pct} />
       </div>
 
-      {/* Row 3: health, file types, peers */}
-      <div style={{ ...cardGrid, gridTemplateColumns: "1fr 1fr 1fr" }}>
-        {/* Sync health gauge */}
-        <div style={{ background: "var(--color-surface)", borderRadius: "var(--radius-card)", border: "1px solid var(--color-border)", padding: 20, display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", fontWeight: 500, marginBottom: 12, alignSelf: "flex-start" }}>Sync health</p>
-          <div style={{ position: "relative", width: 120, height: 60, marginBottom: 8 }}>
-            <svg viewBox="0 0 120 60" width="120" height="60">
-              <path d="M10,60 A50,50 0 0,1 110,60" fill="none" stroke="var(--color-border)" strokeWidth="10" strokeLinecap="round" />
-              {s && <path d="M10,60 A50,50 0 0,1 110,60" fill="none" stroke="var(--color-success)" strokeWidth="10" strokeLinecap="round"
-                strokeDasharray={`${(s.sync_health_percent / 100) * 157} 157`} />}
-            </svg>
-            <div style={{ position: "absolute", bottom: 0, width: "100%", textAlign: "center", fontSize: 20, fontWeight: 700, color: "var(--color-ink)" }}>
-              {s ? Math.round(s.sync_health_percent) : 0}%
-            </div>
-          </div>
-          <p style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Shares fully up to date</p>
-        </div>
+      <div className="dashboard-secondary" style={cardGrid}>
 
         {/* File types donut */}
         <div style={{ background: "var(--color-surface)", borderRadius: "var(--radius-card)", border: "1px solid var(--color-border)", padding: 20 }}>
           <p style={{ fontSize: 13, color: "var(--color-text-secondary)", fontWeight: 500, marginBottom: 8 }}>File types</p>
-          <ResponsiveContainer width="100%" height={130}>
+          {totalFiles > 0 ? <ResponsiveContainer width="100%" height={130}>
             <PieChart>
               <Pie data={pieData} innerRadius={35} outerRadius={55} dataKey="value" paddingAngle={3}>
                 {pieData.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
@@ -78,7 +78,7 @@ export function DashboardPage() {
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
               <Tooltip contentStyle={{ fontSize: 12 }} />
             </PieChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer> : <p style={{ padding: "40px 0", color: "var(--color-text-secondary)", fontSize: 13, textAlign: "center" }}>{s ? "No indexed files yet" : "Loading file types…"}</p>}
         </div>
 
         {/* Connected peers */}

@@ -166,9 +166,6 @@ export function PeersPage() {
                   <td style={{ padding: "12px 16px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <PeerAvatar name={p.display_name} online={p.is_online} size={36} />
-                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: p.is_online ? "#E8F5E9" : "var(--color-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, color: p.is_online ? "var(--color-success)" : "var(--color-text-muted)" }}>
-                        {p.display_name.slice(0, 2).toUpperCase()}
-                      </div>
                       {editingId === p.id ? (
                         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                           <input value={editName} onChange={e => setEditName(e.target.value)} autoFocus
@@ -190,10 +187,7 @@ export function PeersPage() {
                     </div>
                   </td>
                   <td style={{ padding: "12px 16px" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: p.is_online ? "var(--color-success)" : "var(--color-text-muted)" }}>
-                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: p.is_online ? "var(--color-success)" : "var(--color-text-muted)", display: "inline-block", opacity: p.is_online ? 1 : 0.5 }} />
-                      {p.is_online ? "Online" : "Offline"}
-                    </span>
+                    <StatusChip tone={p.is_online ? "green" : "gray"}>{p.is_online ? "Online" : "Offline"}</StatusChip>
                   </td>
                   <td style={{ padding: "12px 16px" }}>
                     {ownedShares.length === 0 ? (

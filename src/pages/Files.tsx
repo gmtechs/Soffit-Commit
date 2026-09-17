@@ -133,14 +133,14 @@ export function FilesPage() {
       {/* ── Left panel: tabs for Shares / Recent / Favourites ── */}
       <div style={{ width: 240, minWidth: 240, background: "var(--color-surface)", borderRadius: "var(--radius-card)", border: "1px solid var(--color-border)", padding: 14, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Tab bar */}
-        <div style={{ display: "flex", gap: 2, marginBottom: 12, background: "var(--color-bg)", borderRadius: 8, padding: 3 }}>
-          {([["shares", <Folder size={12} />], ["recent", <Clock size={12} />], ["favourites", <Star size={12} />]] as [string, React.ReactNode][]).map(([tab, icon]) => (
-            <button key={tab} onClick={() => setSideTab(tab as any)}
-              style={{ flex: 1, padding: "5px 0", borderRadius: 6, border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer",
-                background: sideTab === tab ? "var(--color-primary)" : "transparent",
-                color: sideTab === tab ? "white" : "var(--color-text-secondary)",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}>
-              {icon} {tab.charAt(0).toUpperCase() + tab.slice(1)}
+        <div aria-label="File collections" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 4, marginBottom: 20, background: "var(--color-bg)", borderRadius: 10, padding: 4 }}>
+          {([["shares", <Folder size={15} />], ["recent", <Clock size={15} />], ["favourites", <Star size={15} />]] as [typeof sideTab, React.ReactNode][]).map(([tab, icon]) => (
+            <button key={tab} onClick={() => setSideTab(tab)} aria-pressed={sideTab === tab}
+              style={{ minWidth: 0, minHeight: 56, padding: "8px 2px", borderRadius: 7, border: "1px solid", borderColor: sideTab === tab ? "var(--color-primary)" : "transparent", fontSize: 11, fontWeight: 500, cursor: "pointer",
+                background: sideTab === tab ? "var(--accent-glow)" : "transparent",
+                color: sideTab === tab ? "var(--color-primary)" : "var(--color-text-secondary)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              {icon}<span>{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
             </button>
           ))}
         </div>
