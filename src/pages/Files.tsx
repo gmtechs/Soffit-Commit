@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Folder, FileSpreadsheet, Database, File,
-  RefreshCw, Plus, Trash2, ExternalLink, HardDrive, FolderOpen,
+  Plus, Trash2, ExternalLink, FolderOpen,
   Star, Clock, Eye, X as XIcon,
   MessageCircle,
 } from "lucide-react";
@@ -11,10 +11,10 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { listen } from "@tauri-apps/api/event";
 import {
   listShares, listFiles, createShare, deleteShare,
-  refreshShare, setSelectiveSync,
   getFileHistory, getFavourites, addFavourite, removeFavourite,
   type Share, type FileIndex, type FileHistoryEntry, type FileFavourite,
 } from "../lib/tauri";
+import { IconTile, StatusChip } from "../components/ui/premium";
 import { StatusPill } from "../components/ui/StatusPill";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
@@ -63,7 +63,10 @@ export function FilesPage() {
   const navigate = useNavigate();
   const { setPendingFile } = useFileRouter();
 
-  const loadShares = () => listShares().then(setShares).catch(() => {});
+  const loadShares = () => listShares().then(next => {
+    setShares(next);
+    setSelected(current => next.find(share => share.id === current?.id) ?? next[0] ?? null);
+  }).catch(() => {});
   const loadHistory = () => getFileHistory(15).then(setHistory).catch(() => {});
   const loadFavourites = () => getFavourites().then(setFavourites).catch(() => {});
 
@@ -122,23 +125,7 @@ export function FilesPage() {
     } catch (err: any) { toast("danger", String(err)); }
   };
 
-  const handleRefresh = async () => {
-    if (!selected) return;
-    try {
-      await refreshShare(selected.id);
-      const updated = await listFiles(selected.id);
-      setFiles(updated);
-      toast("success", `${updated.length} files indexed`);
-    } catch (err: any) { toast("danger", String(err)); }
-  };
-
-  const handleSelectiveSync = async (share: Share) => {
-    try {
-      await setSelectiveSync(share.id, !share.selective_sync);
-      toast("success", !share.selective_sync ? "Selective sync on — files fetched on open" : "Selective sync off — always keep local copy");
-      loadShares();
-    } catch (err: any) { toast("danger", String(err)); }
-  };
+  const totalBytes = files.reduce((total, file) => total + file.size_bytes, 0);
 
   return (
     <div style={{ display: "flex", gap: 16, height: "100%", overflow: "hidden" }}>
@@ -163,7 +150,7 @@ export function FilesPage() {
           <>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
               <span style={{ fontWeight: 600, fontSize: 13 }}>Shares</span>
-              <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}><Plus size={12} /></Button>
+              <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}><Plus size={12} /> New share</Button>
             </div>
             <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
               {shares.length === 0 && <p style={{ fontSize: 12, color: "var(--color-text-muted)", textAlign: "center", marginTop: 20 }}>No shares yet</p>}
@@ -172,12 +159,11 @@ export function FilesPage() {
                   style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 9px", borderRadius: 7, cursor: "pointer",
                     background: selected?.id === s.id ? "var(--color-bg)" : "transparent",
                     border: `1px solid ${selected?.id === s.id ? "var(--color-border)" : "transparent"}` }}>
-                  <Folder size={14} color={s.selective_sync ? "var(--color-warning)" : "var(--color-primary)"} />
-                  <span style={{ flex: 1, fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.display_name}</span>
-                  <button onClick={ev => { ev.stopPropagation(); handleSelectiveSync(s); }} title="Toggle selective sync"
-                    style={{ background: "none", border: "none", cursor: "pointer", color: s.selective_sync ? "var(--color-warning)" : "var(--color-text-muted)", padding: 1 }}>
-                    <HardDrive size={11} />
-                  </button>
+                  <IconTile size={32} tone={s.is_owner ? "blue" : "gray"}><Folder size={16} /></IconTile>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.display_name}</p>
+                    <p style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 3 }}>{s.is_owner ? "Shared from this device" : "Full local copy"}</p>
+                  </div>
                   <button onClick={ev => { ev.stopPropagation(); handleDelete(s.id); }}
                     style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", padding: 1 }}>
                     <Trash2 size={11} />
@@ -234,24 +220,32 @@ export function FilesPage() {
       {!previewFile && (
         <div style={{ flex: 1, background: "var(--color-surface)", borderRadius: "var(--radius-card)", border: "1px solid var(--color-border)", padding: 20, overflowY: "auto", display: "flex", flexDirection: "column" }}>
         {!selected ? (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", gap: 8 }}>
-            <Folder size={44} />
-            <p style={{ fontWeight: 500 }}>Select a share to browse files</p>
-            <Button variant="primary" onClick={() => setAddOpen(true)} style={{ marginTop: 8 }}><Plus size={14} /> Add share</Button>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 16, padding: 32, background: "radial-gradient(ellipse at 50% 35%, var(--accent-glow), transparent 65%)" }}>
+            <IconTile size={80}><FolderOpen size={38} strokeWidth={1.5} /></IconTile>
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--color-primary)", textTransform: "uppercase", marginBottom: 10 }}>Your shared workspace</p>
+              <h2 style={{ fontSize: 28, fontWeight: 600 }}>Your files. Every connected device.</h2>
+              <p style={{ maxWidth: 420, fontSize: 13, lineHeight: 1.7, color: "var(--color-text-secondary)", margin: "12px auto 0" }}>Add a folder to share with your paired devices. All files in your shares sync automatically when peers connect—no manual sync required.</p>
+            </div>
+            <Button variant="primary" onClick={() => setAddOpen(true)}><Plus size={14} /> Add your first share</Button>
+            <button onClick={() => navigate("/peers")} style={{ color: "var(--color-primary)", background: "none", border: "none", fontSize: 12 }}>Manage paired devices →</button>
           </div>
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div>
-                <h2 style={{ fontWeight: 600, fontSize: 15 }}>{selected.display_name}</h2>
-                <p style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>{selected.path}</p>
+                <p style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 6 }}>Files / {selected.display_name}</p>
+                <h2 style={{ fontWeight: 600, fontSize: 24 }}>{selected.display_name}</h2>
+                <p title={selected.path} style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)", marginTop: 6, overflowWrap: "anywhere" }}>{selected.path}</p>
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 10 }}>{files.length} files · {formatBytes(totalBytes)} indexed</p>
               </div>
-              <Button size="sm" variant="secondary" onClick={handleRefresh}><RefreshCw size={13} /> Refresh</Button>
+              <span title="All shared files sync automatically when peers connect"><StatusChip tone="blue">Automatic sync</StatusChip></span>
             </div>
             {files.length === 0 ? (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", gap: 6 }}>
-                <File size={36} /><p style={{ fontWeight: 500 }}>No files indexed</p>
-                <p style={{ fontSize: 12 }}>Click Refresh to scan the folder</p>
+                <IconTile size={56}><FolderOpen size={28} /></IconTile>
+                <h3 style={{ fontWeight: 600, color: "var(--color-ink)", marginTop: 10 }}>Ready for your files</h3>
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", maxWidth: 360, textAlign: "center", lineHeight: 1.6 }}>No files indexed yet. Files added to shared folders are detected automatically and sync when peers connect.</p>
               </div>
             ) : (
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
