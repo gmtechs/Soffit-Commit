@@ -4,9 +4,10 @@ import {
   listPeers, removePeer, renamePeer, generatePairingCode,
   consumePairingCode, reconnectPeers,
   listShares, setPermission, getPeerPermissions,
-  type Peer, type PairingCodeWithQr, type Share,
+  type Peer, type PairingCodeInfo, type Share,
 } from "../lib/tauri";
 import { Button } from "../components/ui/Button";
+import { StatusChip, PeerAvatar } from "../components/ui/premium";
 import { Modal } from "../components/ui/Modal";
 import { useToast } from "../components/ui/Toast";
 
@@ -20,7 +21,7 @@ export function PeersPage() {
   const [peers, setPeers] = useState<Peer[]>([]);
   const [tab, setTab] = useState<"show" | "enter">("show");
   const [pairOpen, setPairOpen] = useState(false);
-  const [pairingCode, setPairingCode] = useState<PairingCodeWithQr | null>(null);
+  const [pairingCode, setPairingCode] = useState<PairingCodeInfo | null>(null);
   const [enteredCode, setEnteredCode] = useState("");
   const [peerName, setPeerName] = useState("");
   const [entering, setEntering] = useState(false);
@@ -164,6 +165,7 @@ export function PeersPage() {
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                   <td style={{ padding: "12px 16px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <PeerAvatar name={p.display_name} online={p.is_online} size={36} />
                       <div style={{ width: 34, height: 34, borderRadius: "50%", background: p.is_online ? "#E8F5E9" : "var(--color-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, color: p.is_online ? "var(--color-success)" : "var(--color-text-muted)" }}>
                         {p.display_name.slice(0, 2).toUpperCase()}
                       </div>
@@ -179,7 +181,9 @@ export function PeersPage() {
                         <div>
                           <p style={{ fontWeight: 500 }}>{p.display_name}</p>
                           <p style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 1 }}>
-                            {p.node_id.slice(0, 20)}…
+                            <button onClick={() => { navigator.clipboard.writeText(p.node_id); toast("success", "Device ID copied"); }} title="Copy full device ID" style={{ fontSize: 11, color: "var(--color-text-muted)", fontFamily: "var(--font-mono)", background: "none", border: "none", cursor: "pointer", padding: 0 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--color-primary)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-muted)")}>
+                            {p.node_id.slice(0, 20)}... <Copy size={10} />
+                          </button>
                           </p>
                         </div>
                       )}
@@ -195,16 +199,16 @@ export function PeersPage() {
                     {ownedShares.length === 0 ? (
                       <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>No shares yet</span>
                     ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {ownedShares.map(s => (
-                          <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                            <span title={s.path} style={{ fontSize: 12, color: "var(--color-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>
+                          <div key={s.id} title={s.path} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 4px 3px 10px", borderRadius: 999, background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", maxWidth: 230 }}>
+                            <span style={{ fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {s.display_name}
                             </span>
                             <select
                               value={permMap[`${p.id}:${s.id}`] ?? "none"}
                               onChange={e => handlePermission(p.id, s.id, s.display_name, e.target.value)}
-                              style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid var(--color-border)", fontSize: 12, background: "var(--color-bg)", color: "var(--color-ink)", cursor: "pointer" }}
+                              style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 999, border: "none", cursor: "pointer", background: (permMap[`${p.id}:${s.id}`] ?? "none") === "edit" ? "rgba(59, 107, 255, 0.16)" : (permMap[`${p.id}:${s.id}`] ?? "none") === "view" ? "rgba(232, 178, 74, 0.16)" : "transparent", color: (permMap[`${p.id}:${s.id}`] ?? "none") === "edit" ? "var(--color-primary)" : (permMap[`${p.id}:${s.id}`] ?? "none") === "view" ? "var(--color-warning)" : "var(--color-text-muted)" }}
                             >
                               <option value="none">No access</option>
                               <option value="view">View</option>

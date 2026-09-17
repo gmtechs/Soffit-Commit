@@ -71,14 +71,14 @@ function GridView({ path, sheetIndex, sheet, onSaved }: { path: string; sheetInd
     } catch (error) { toast("danger", `Could not save cell: ${error}`); }
     finally { setSavingCell(false); }
   };
-  return <div style={{ flex: 1, overflow: "auto", background: "#fff" }}>
+  return <div style={{ flex: 1, overflow: "auto", background: "var(--color-bg)" }}>
     <table style={{ borderCollapse: "collapse", minWidth: "100%", fontSize: 12 }}>
       <thead><tr><th style={gridHeaderStyle} />{Array.from({ length: displayCols }, (_, i) => <th key={i} style={gridHeaderStyle}>{String.fromCharCode(65 + (i % 26))}</th>)}</tr></thead>
       <tbody>{displayRows.map((row, rowIndex) => <tr key={rowIndex}>
         <th style={gridHeaderStyle}>{rowIndex + 1}</th>
         {Array.from({ length: displayCols }, (_, colIndex) => {
           const value = getValue(row[colIndex]); const active = editing?.row === rowIndex && editing.col === colIndex;
-          return <td key={colIndex} style={{ border: "1px solid #e5e7eb", minWidth: 92, height: 28, padding: 0, background: active ? "#fffaf3" : "#fff" }} onDoubleClick={() => setEditing({ row: rowIndex, col: colIndex, value })}>
+          return <td key={colIndex} style={{ border: "1px solid var(--color-border)", minWidth: 92, height: 28, padding: 0, background: active ? "var(--accent-glow)" : "var(--color-surface)" }} onDoubleClick={() => setEditing({ row: rowIndex, col: colIndex, value })}>
             {active ? <input autoFocus value={editing.value} onChange={e => setEditing({ ...editing, value: e.target.value })} onBlur={saveCell} onKeyDown={e => { if (e.key === "Enter") saveCell(); if (e.key === "Escape") setEditing(null); }} disabled={savingCell} style={{ width: "100%", height: "100%", minHeight: 27, border: "2px solid var(--color-primary)", padding: "3px 6px", outline: "none" }} /> : <span style={{ display: "block", padding: "5px 7px", whiteSpace: "pre-wrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }}>{value}</span>}
           </td>;
         })}</tr>)}</tbody>
@@ -86,7 +86,7 @@ function GridView({ path, sheetIndex, sheet, onSaved }: { path: string; sheetInd
     {sheet.max_row > 200 && <p style={{ padding: 10, color: "var(--color-text-muted)" }}>Showing the first 200 rows.</p>}
   </div>;
 }
-const gridHeaderStyle: React.CSSProperties = { position: "sticky", top: 0, zIndex: 1, border: "1px solid #d1d5db", background: "#f6f6f4", color: "#6b6b66", fontWeight: 500, minWidth: 42, padding: "5px 7px", textAlign: "center" };
+const gridHeaderStyle: React.CSSProperties = { position: "sticky", top: 0, zIndex: 1, border: "1px solid var(--color-border)", background: "var(--color-surface-raised)", color: "var(--color-text-secondary)", fontWeight: 500, minWidth: 42, padding: "5px 7px", textAlign: "center" };
 
 // ── Form view ─────────────────────────────────────────────────────────────────
 function FormView({ path, layout }: { path: string; layout: FormLayout }) {
@@ -271,6 +271,19 @@ export function ExcelPage() {
     } catch { /* cancelled */ }
   };
 
+  // Ctrl/⌘O opens the browse dialog — the shortcut shown on the empty state.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        pickFile();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const openFile = async (path: string) => {
     let loadOk = false;
     try {
@@ -388,14 +401,21 @@ export function ExcelPage() {
 
   if (!openPath) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}>
-        <div style={{ textAlign: "center" }}>
-          <FileSpreadsheet size={52} style={{ margin: "0 auto 16px", color: "var(--color-success)" }} />
-          <p style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Open an Excel file</p>
-          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 20, maxWidth: 340 }}>
-            Full fidelity rendering — styles, fonts, colors, formulas, merged cells, multiple sheets.
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", position: "relative", overflow: "hidden" }}>
+        {/* Hero glow behind the CTA — light emanates from the value prop. */}
+        <div style={{ position: "absolute", width: 420, height: 420, borderRadius: "50%", background: "radial-gradient(circle, var(--accent-glow) 0%, transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ textAlign: "center", position: "relative" }}>
+          <div style={{ width: 64, height: 64, borderRadius: 16, background: "var(--accent-glow)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
+            <FileSpreadsheet size={30} color="var(--color-primary)" />
+          </div>
+          <p style={{ fontWeight: 600, fontSize: 20, marginBottom: 8, letterSpacing: "-0.02em" }}>Open an Excel file</p>
+          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 22, maxWidth: 360 }}>
+            Full fidelity rendering — styles, fonts, colors, formulas, merged cells and multiple sheets, right on your desktop.
           </p>
-          <Button variant="primary" onClick={pickFile}>Browse file…</Button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <Button variant="primary" onClick={pickFile}>Browse file…</Button>
+            <span style={{ fontSize: 11, color: "var(--color-text-muted)", padding: "4px 8px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-surface)" }}>Ctrl / ⌘ O</span>
+          </div>
         </div>
       </div>
     );

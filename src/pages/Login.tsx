@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { HardDrive, Eye, EyeOff } from "lucide-react";
-import { login } from "../lib/tauri";
+import { HardDrive, Eye, EyeOff, LogIn, UserPlus } from "lucide-react";
+import { login, createUser } from "../lib/tauri";
 import { useAuthStore } from "../store/auth";
 import { useToast } from "../components/ui/Toast";
 import { Button } from "../components/ui/Button";
 
 export function LoginPage() {
+  const [mode, setMode] = useState<"login" | "signup">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -18,13 +19,22 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 8) { toast("danger", "Password must be at least 8 characters"); return; }
+    if (username.trim().length < 3) { toast("danger", "Username must be at least 3 characters"); return; }
     setLoading(true);
     try {
-      const user = await login(username, password);
+      let user;
+      if (mode === "signup") {
+        user = await createUser(username.trim(), password);
+        toast("success", "Account created successfully");
+      } else {
+        user = await login(username, password);
+      }
       setUser(user);
       navigate("/");
     } catch (err: any) {
-      toast("danger", String(err));
+      toast("danger", mode === "signup" && err.message.includes("already")
+        ? "An account with that username already exists"
+        : String(err));
     } finally {
       setLoading(false);
     }
@@ -45,11 +55,45 @@ export function LoginPage() {
           <span style={{ fontSize: 18, fontWeight: 700 }}>Soffit Commit</span>
         </div>
 
+        {/* Mode toggle */}
+        <div style={{ display: "flex", background: "var(--color-bg)", borderRadius: 8, padding: 3, marginBottom: 24, border: "1px solid var(--color-border)" }}>
+          <button
+            type="button"
+            onClick={() => setMode("login")}
+            style={{
+              flex: 1, padding: "8px 12px", border: "none",
+              borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600,
+              background: mode === "login" ? "var(--color-primary)" : "transparent",
+              color: mode === "login" ? "white" : "var(--color-text-secondary)",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <LogIn size={14} /> Sign in
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("signup")}
+            style={{
+              flex: 1, padding: "8px 12px", border: "none",
+              borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600,
+              background: mode === "signup" ? "var(--color-primary)" : "transparent",
+              color: mode === "signup" ? "white" : "var(--color-text-secondary)",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <UserPlus size={14} /> Create account
+            </span>
+          </button>
+        </div>
+
         <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-          Sign in
+          {mode === "login" ? "Sign in" : "Create your account"}
         </h1>
         <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 24 }}>
-          Enter the credentials issued by a user who already has access to this device.
+          {mode === "login"
+            ? "Enter your credentials to access your workspace."
+            : "Set up a new local account on this device."}
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -67,10 +111,10 @@ export function LoginPage() {
             </div>
           </div>
           <p style={{ fontSize: 11, color: "var(--color-text-muted)", padding: "8px 12px", background: "var(--color-bg)", borderRadius: 8 }}>
-            New accounts are created from Settings by an existing user.
+            {mode === "signup" ? "Your account stays local on this device." : "Don't have an account? Create one instead."}
           </p>
           <Button type="submit" variant="primary" disabled={loading} style={{ width: "100%", marginTop: 4 }}>
-            {loading ? "Please wait…" : "Sign in"}
+            {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
           </Button>
         </form>
       </div>

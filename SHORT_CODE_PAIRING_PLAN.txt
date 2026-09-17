@@ -1,0 +1,61 @@
+SHORT CODE PAIRING — IMPLEMENTATION PLAN
+========================================
+
+PROBLEM (verified by reading the code, not assumed)
+---------------------------------------------------
+1. pairing.rs::generate_pairing_code does:
+       let short = format_z32(&node_id);
+   but node.rs sets node_id = endpoint.id().to_string(), which is 64-char HEX
+   (e.g. f08ed44f2acea05e...9f02). format_z32() performs NO encoding at all —
+   it only inserts dashes every 4 chars. So the "short code" is grouped hex.
+
+2. pairing.rs::consume_pairing_code plain-code path requires:
+       cleaned.len() == 52  AND  every char in "ybndrfg8ejkmcpxotuvzabcdefghijklqw"
+   A 64-char hex string can never satisfy this (0/2/4/7/d are not in the
+   z-base-32 alphabet). => the short code ALWAYS errors out.
+
+3. Therefore the only functional path is `<code>:<base64 ticket>`, and
+   commands.rs::cmd_generate_pairing_code returns that blob in BOTH `code`
+   and `short_code`, and Peers.tsx renders pairingCode.code => the user sees
+   the 400-character blob. That is the reported bug.
+
+CONSTRAINT
+----------
+To dial a peer over iroh you need their 32-byte public key. No encoding makes
+that human-short. A short code must therefore be RESOLVED to an address.
+There is no rendezvous server in this project (the `axum` dep is unused), so
+resolution happens on the LOCAL NETWORK via UDP multicast — no server, no
+new infrastructure.
+
+DESIGN
+------
+* User-facing code = 8 characters from an unambiguous alphabet
+  (23456789ABCDEFGHJKMNPQRSTVWXYZ — no 0/1/I/L/O/U), shown as K7F2-QP3M.
+* The device that shows a code publishes `code -> its EndpointAddr` on
+  multicast group 239.255.42.99:45871 every 1.2 s while the code is on screen.
+* The device that enters the code listens to that group, matches the code, and
+  gets the full EndpointAddr — then dials normally.
+* Portable fallback (different networks / QR) is unchanged: `<CODE>:<base64>`
+  where the base64 embeds the EndpointAddr directly.
+* A 52-char z-base-32 or 64-char hex endpoint id is also still accepted.
+
+FILES
+-----
+1. src-tauri/Cargo.toml            + socket2 (multicast socket options)
+2. src-tauri/src/network/rendezvous.rs   NEW — multicast publish/listen/resolve
+3. src-tauri/src/network/mod.rs    + pub mod rendezvous
+4. src-tauri/src/network/node.rs   + rendezvous field, start + spawn tasks
+5. src-tauri/src/pairing.rs        short-code generation, ConsumeTarget enum,
+                                   build_ticket, rewritten tests
+6. src-tauri/src/commands.rs       publish on generate; resolve on consume;
+                                   + full_code field
+7. src/lib/tauri.ts                + full_code in PairingCodeWithQr
+8. src/pages/Peers.tsx             big short code primary, advanced blob behind
+                                   a disclosure, updated copy/placeholder
+
+VERIFY
+------
+* cargo test (pairing tests + new rendezvous round-trip test)
+* cargo build
+* npx tsc --noEmit + npm run build
+* run both instances, generate a code on one, enter it on the other

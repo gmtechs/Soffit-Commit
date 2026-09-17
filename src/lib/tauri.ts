@@ -21,7 +21,7 @@ export interface DashboardStats {
   storage_delta_pct: number; files_synced_delta_pct: number;
   files_edited_delta_pct: number; conflicts_delta_pct: number;
 }
-export interface PairingCodeWithQr { id: string; code: string; short_code: string; created_at: string; expires_at: string; qr_base64: string; node_id: string | null; }
+export interface PairingCodeInfo { id: string; code: string; short_code: string; created_at: string; expires_at: string; node_id: string | null; rendezvous_enabled: boolean; }
 
 // Excel types
 export type CellValue = string | number | boolean | null;
@@ -163,7 +163,8 @@ export const updateUser = (userId: string, username: string, password?: string) 
   invoke<User>("cmd_update_user", { userId, username, password });
 
 // ── Pairing ────────────────────────────────────────────────────────────────────
-export const generatePairingCode = () => invoke<PairingCodeWithQr>("cmd_generate_pairing_code");
+export const generatePairingCode = () => invoke<PairingCodeInfo>("cmd_generate_pairing_code");
+export const stopPairingBroadcast = (shortCode: string) => invoke<void>("cmd_stop_pairing_broadcast", { shortCode });
 export const consumePairingCode = (code: string, displayName: string) => invoke<string | null>("cmd_consume_pairing_code", { code, displayName });
 export const addPeer = (nodeId: string, displayName: string, publicKey: string, endpointAddr?: string) =>
   invoke<Peer>("cmd_add_peer", { nodeId, displayName, publicKey, endpointAddr });

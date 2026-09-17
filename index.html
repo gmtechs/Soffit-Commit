@@ -16,7 +16,7 @@
       #launch-screen {
         position: fixed; inset: 0; z-index: 9999;
         display: grid; place-items: center;
-        background: #f4f3f0;
+        background: #0A0B0F;
         transition: opacity 180ms ease-out, visibility 180ms ease-out;
       }
       #launch-screen.is-ready { opacity: 0; visibility: hidden; pointer-events: none; }
@@ -24,19 +24,19 @@
       .launch-mark {
         width: 46px; height: 46px; border-radius: 12px;
         display: grid; place-items: center;
-        background: #e27100; color: #fff7ed; font-size: 23px; font-weight: 700;
-        box-shadow: 0 8px 20px rgba(226, 113, 0, .18);
+        background: linear-gradient(135deg, #3B6BFF, #2B4CFF); color: #fff; font-size: 23px; font-weight: 700;
+        box-shadow: 0 8px 20px rgba(43, 76, 255, .30);
       }
       .launch-title { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
-      .launch-status { color: #6e6d68; font-size: 12px; }
-      .launch-loader { width: 22px; height: 22px; border: 2px solid #e9e7e2; border-top-color: #e27100; border-radius: 50%; animation: launch-spin .7s linear infinite; }
-      .launch-help { display: none; margin-top: 6px; border: 0; border-radius: 6px; padding: 7px 10px; background: #e27100; color: white; font: inherit; font-size: 12px; cursor: pointer; }
+      .launch-status { color: #9497A8; font-size: 12px; }
+      .launch-loader { width: 22px; height: 22px; border: 2px solid #23252F; border-top-color: #3B6BFF; border-radius: 50%; animation: launch-spin .7s linear infinite; }
+      .launch-help { display: none; margin-top: 6px; border: 0; border-radius: 6px; padding: 7px 10px; background: linear-gradient(135deg, #3B6BFF, #2B4CFF); color: white; font: inherit; font-size: 12px; cursor: pointer; }
       #launch-screen.is-slow .launch-status { display: none; }
       #launch-screen.is-slow .launch-help { display: block; }
       @keyframes launch-spin { to { transform: rotate(360deg); } }
-      html[data-theme="dark"] body, html[data-theme="dark"] #launch-screen { background: #1c1b19; color: #f0efeb; }
-      html[data-theme="dark"] .launch-status { color: #a6a49d; }
-      html[data-theme="dark"] .launch-loader { border-color: #3a3835; border-top-color: #e27100; }
+      html[data-theme="light"] body, html[data-theme="light"] #launch-screen { background: #F4F5F8; color: #16181D; }
+      html[data-theme="light"] .launch-status { color: #5A5E6B; }
+      html[data-theme="light"] .launch-loader { border-color: #E4E6EC; border-top-color: #2B4CFF; }
     </style>
     <script>
       // Apply persisted theme synchronously before first paint to prevent flash

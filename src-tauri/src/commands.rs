@@ -74,52 +74,47 @@ pub fn cmd_update_user(
 // ── Pairing ───────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn cmd_generate_pairing_code(state: State<'_, AppState>) -> CmdResult<PairingCodeWithQr> {
+pub fn cmd_generate_pairing_code(state: State<'_, AppState>) -> CmdResult<PairingCodeInfo> {
     let db = state.db.lock().map_err(e)?;
 
-    // Get node addr ticket synchronously from the stored node_id
-    let node_id = state
-        .iroh_node
-        .try_lock()
-        .ok()
-        .and_then(|g| g.as_ref().map(|n| n.node_id.clone()));
-
-    // Get the full EndpointAddr for embedding in the code
-    let endpoint_addr_json = state
-        .iroh_node
-        .try_lock()
-        .ok()
-        .and_then(|g| {
-            g.as_ref().map(|n| {
-                let addr = n.endpoint.addr();
-                serde_json::to_string(&addr).ok()
-            })
-        })
-        .flatten();
+    // `addr()` is the live address, so refresh it after an interface change.
+    let (node_id, endpoint_addr_json) = {
+        let guard = state.iroh_node.try_lock().map_err(e)?;
+        match guard.as_ref() {
+            Some(n) => (
+                Some(n.node_id.clone()),
+                serde_json::to_string(&n.endpoint.addr()).ok(),
+            ),
+            None => (None, None),
+        }
+    };
 
     let code = pairing::generate_pairing_code(&db, endpoint_addr_json.as_deref()).map_err(e)?;
 
-    // QR encodes the full code (including embedded addr)
-    let qr_b64 = generate_qr_base64(&code.code).unwrap_or_default();
+    // Announce the short code on the local network for as long as it is valid,
+    // so the other device can type 8 characters instead of swapping a ticket.
+    let short = pairing::short_code_of(&code.code);
+    if let Some(ref addr) = endpoint_addr_json {
+        state
+            .rendezvous
+            .publish(&short, addr, chrono::Duration::minutes(pairing::CODE_TTL_MINUTES).to_std().unwrap_or_default());
+    }
 
-    // Extract just the short part for display (XXXX-XXXX)
-    let short_display = code
-        .code
-        .split(':')
-        .next()
-        .unwrap_or(&code.code)
-        .to_string();
-
-    Ok(PairingCodeWithQr {
+    Ok(PairingCodeInfo {
         id: code.id,
-        code: code.code.clone(),
-        short_code: short_display,
+        code: pairing::display_code(&pairing::portable_of(&code.code)),
+        short_code: pairing::display_code(&short),
         created_at: code.created_at,
         expires_at: code.expires_at,
-        qr_base64: qr_b64,
         node_id,
+        rendezvous_enabled: state.rendezvous.is_enabled(),
     })
 }
+
+/// How long to wait for the other device to announce its short code on the
+/// local network before giving up. The announcer broadcasts every 1.2 s, so
+/// this covers several missed datagrams without feeling like a hang.
+const RESOLVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
 #[tauri::command]
 pub fn cmd_consume_pairing_code(
@@ -127,66 +122,113 @@ pub fn cmd_consume_pairing_code(
     display_name: String,
     state: State<'_, AppState>,
 ) -> CmdResult<Option<String>> {
-    // Returns the embedded endpoint addr if present.  The DB lock must be
-    // released before dialing because a connection may take a moment.
-    let endpoint_addr = {
+    // Validation only — the DB lock is released before any network work so a
+    // slow dial can never hold up the rest of the app.
+    let validated = {
         let db = state.db.lock().map_err(e)?;
         pairing::consume_pairing_code(&db, &code).map_err(e)?
     };
+    let Some(validated) = validated else {
+        return Ok(None);
+    };
 
-    // If we got an endpoint addr, connect to that peer immediately.
-    if let Some(ref addr_json) = endpoint_addr {
-        let remote_node_id = pairing::endpoint_node_id(addr_json).map_err(e)?;
-        let local_display_name = {
-            let db = state.db.lock().map_err(e)?;
-            db.query_row(
-                "SELECT username FROM users ORDER BY created_at ASC LIMIT 1",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .unwrap_or_else(|_| "This device".to_string())
-        };
-        let node = state
-            .iroh_node
-            .lock()
-            .map_err(e)?
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| "Networking is still starting; try again in a moment.".to_string())?;
-
-        // Do not report success until the authenticated iroh handshake and
-        // Hello message have actually completed.
-        state
+    // Case 1: a portable ticket or a legacy hex node id — the address is known
+    // already, so no lookup is needed.
+    let addr_json = if validated.contains("\"id\"") && validated.contains("\"addrs\"") {
+        validated.clone()
+    } else if validated.len() == 64 {
+        use std::str::FromStr;
+        let key = iroh::PublicKey::from_str(&validated)
+            .map_err(|_| "That code could not be decoded.".to_string())?;
+        serde_json::to_string(&iroh::EndpointAddr::from(key)).map_err(e)?
+    } else {
+        // Case 2: a short code. Ask the local network where that device is.
+        // The other device announces itself while its code is on screen.
+        let resolved = state
             .rt
-            .block_on(node.connect_to_peer(addr_json, &local_display_name))
-            .map_err(e)?;
+            .block_on(state.rendezvous.resolve(&validated, RESOLVE_TIMEOUT));
 
+        match resolved {
+            Some(addr) => addr,
+            None => {
+                // Distinguish "nobody is announcing this code" from "we cannot
+                // listen at all", because the fix is different for each.
+                if !state.rendezvous.is_enabled() {
+                    return Err(
+                        "Short codes need both devices on the same network. Use the full code shown on the other device instead — it works from any network."
+                            .to_string(),
+                    );
+                }
+                return Err(format!(
+                    "No device is showing the code {}. Check that the other device is open on \
+                     \"Share my code\", that both devices are on the same network, and try again.",
+                    pairing::display_code(&validated)
+                ));
+            }
+        }
+    };
+
+    let remote_node_id = pairing::endpoint_node_id(&addr_json).map_err(e)?;
+    let local_display_name = {
         let db = state.db.lock().map_err(e)?;
-        let peer =
-            peers::add_peer(&db, &remote_node_id, &display_name, &remote_node_id).map_err(e)?;
-        pairing::update_peer_endpoint(&db, &remote_node_id, addr_json).map_err(e)?;
-        activity::log_activity(&db, "system", "peer_added", &peer.display_name, None).ok();
-    }
+        db.query_row(
+            "SELECT username FROM users ORDER BY created_at ASC LIMIT 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_else(|_| "This device".to_string())
+    };
+    let node = state
+        .iroh_node
+        .lock()
+        .map_err(e)?
+        .as_ref()
+        .cloned()
+        .ok_or_else(|| "Networking is still starting; try again in a moment.".to_string())?;
 
-    Ok(endpoint_addr)
+    // Dial. A reachable peer is re-dialled from the stored address on the next
+    // launch, so this only has to succeed once.
+    state
+        .rt
+        .block_on(node.connect_to_peer(&addr_json, &local_display_name))
+        .map_err(e)?;
+
+    let db = state.db.lock().map_err(e)?;
+    let peer =
+        peers::add_peer(&db, &remote_node_id, &display_name, Some(&remote_node_id)).map_err(e)?;
+    pairing::update_peer_endpoint(&db, &remote_node_id, &addr_json).map_err(e)?;
+    activity::log_activity(&db, "system", "peer_added", &peer.display_name, None).ok();
+    Ok(Some(addr_json))
 }
 
 #[tauri::command]
 pub fn cmd_add_peer(
     node_id: String,
     display_name: String,
-    public_key: String,
+    public_key: Option<String>,
     endpoint_addr: Option<String>,
     state: State<'_, AppState>,
 ) -> CmdResult<Peer> {
     let db = state.db.lock().map_err(e)?;
-    let peer = peers::add_peer(&db, &node_id, &display_name, &public_key).map_err(e)?;
+    let peer = peers::add_peer(&db, &node_id, &display_name, public_key.as_deref()).map_err(e)?;
     // Store endpoint addr if provided
     if let Some(ref addr) = endpoint_addr {
         pairing::update_peer_endpoint(&db, &node_id, addr).ok();
     }
     activity::log_activity(&db, "system", "peer_added", &display_name, None).ok();
     Ok(peer)
+}
+
+/// Stop announcing a short code on the local network.
+///
+/// Called when the pairing dialog is dismissed. The code still works through
+/// its portable (full) form, but it stops being discoverable by anyone on the
+/// LAN who might be watching for codes — announcing a code that is no longer
+/// displayed serves no purpose.
+#[tauri::command]
+pub fn cmd_stop_pairing_broadcast(short_code: String, state: State<'_, AppState>) -> CmdResult<()> {
+    state.rendezvous.unpublish(&short_code);
+    Ok(())
 }
 
 /// Reconnect to all previously paired peers using stored endpoint addrs.
@@ -539,6 +581,12 @@ pub fn cmd_create_share(
     let share = {
         let db = state.db.lock().map_err(e)?;
         let share = shares::create_share(&db, &path, &display_name).map_err(e)?;
+        // A new share goes out to every paired device straight away: grant each
+        // known peer so the push below (and every future connect) streams it
+        // with no manual per-share permission step.
+        for peer in peers::list_peers(&db).unwrap_or_default() {
+            peers::set_permission(&db, &share.id, &peer.id, PermissionLevel::Edit).ok();
+        }
         activity::log_activity(&db, "system", "share_created", &display_name, None).ok();
         share
     };
@@ -1221,29 +1269,24 @@ pub fn cmd_read_file_text(file_path: String) -> CmdResult<String> {
     std::fs::read_to_string(&file_path).map_err(e)
 }
 
-fn generate_qr_base64(data: &str) -> anyhow::Result<String> {
-    use image::Luma;
-    use qrcode::{EcLevel, QrCode};
-    let code = QrCode::with_error_correction_level(data, EcLevel::M)?;
-    let img = code.render::<Luma<u8>>().min_dimensions(200, 200).build();
-    let mut buf = std::io::Cursor::new(Vec::new());
-    image::DynamicImage::ImageLuma8(img).write_to(&mut buf, image::ImageFormat::Png)?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(buf.into_inner()))
-}
-
 // ── Extra response types ──────────────────────────────────────────────────────
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PairingCodeWithQr {
+pub struct PairingCodeInfo {
     pub id: String,
-    pub code: String,       // full code with embedded addr
-    pub short_code: String, // just XXXX-XXXX for display
+    /// The portable code, grouped for reading (`XXXX-XXXX-…`). It is this
+    /// device's node id, so the other device can pair from any network.
+    pub code: String,
+    /// `K7F2-QP3M` — what a person reads out on the local network.
+    pub short_code: String,
     pub created_at: String,
     pub expires_at: String,
-    pub qr_base64: String,
     pub node_id: Option<String>,
+    /// False when the local network listener could not start, in which case
+    /// the UI tells the user to use the full code instead of the short code.
+    pub rendezvous_enabled: bool,
 }
 
 // ── AI ────────────────────────────────────────────────────────────────────────

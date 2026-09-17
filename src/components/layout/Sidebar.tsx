@@ -44,8 +44,8 @@ export function Sidebar() {
     textDecoration: "none",
     fontSize: 13,
     fontWeight: isActive ? 600 : 500,
-    background: isActive ? "rgba(226,113,0,0.08)" : "transparent",
-    color: "var(--color-ink)",
+    background: isActive ? "var(--accent-glow)" : "transparent",
+    color: isActive ? "var(--color-ink)" : "var(--color-text-secondary)",
     borderLeft: isActive ? "2px solid var(--color-primary)" : "2px solid transparent",
     transition: "all 0.12s",
     whiteSpace: "nowrap" as const,
@@ -69,13 +69,11 @@ export function Sidebar() {
       transition: "width 0.2s, min-width 0.2s",
       overflow: "hidden",
     }}>
-      {/* Brand */}
-      <div style={{ padding: "16px 4px 12px", display: "flex", alignItems: "center", gap: collapsed ? 0 : 8, justifyContent: collapsed ? "center" : "flex-start", cursor: "pointer" }}
+      {/* Brand — the gradient logo mark is the app's signature moment. */}
+      <div style={{ padding: "16px 4px 12px", display: "flex", alignItems: "center", gap: collapsed ? 0 : 9, justifyContent: collapsed ? "center" : "flex-start", cursor: "pointer" }}
         onClick={() => setCollapsed(c => !c)} title={collapsed ? "Expand" : "Collapse"}>
-        <div style={{ width: 28, height: 28, minWidth: 28, borderRadius: 6, background: "var(--color-ink)", display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}>
-          <AppLogo size={20} />
-        </div>
-        {!collapsed && <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-ink)" }}>Soffit Commit</span>}
+        <AppLogo size={28} />
+        {!collapsed && <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-ink)", letterSpacing: "-0.01em" }}>Soffit Commit</span>}
       </div>
 
       {/* Main nav */}
@@ -102,16 +100,19 @@ export function Sidebar() {
         </nav>
       </div>
 
-      {/* Bottom storage CTA */}
+      {/* Bottom glanceable widget: device pairing is the key action here. */}
       {!collapsed && (
-        <div style={{ marginTop: "auto", marginBottom: 16, background: "var(--color-bg)", borderRadius: 6, padding: 12, border: "1px solid var(--color-border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-            <AppLogo size={13} />
-            <span style={{ fontWeight: 600, fontSize: 12 }}>Storage</span>
+        <div style={{ marginTop: "auto", marginBottom: 16, background: "var(--color-bg)", borderRadius: "var(--radius-control)", padding: 12, border: "1px solid var(--color-border)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+            <Users size={13} color="var(--color-primary)" />
+            <span style={{ fontWeight: 600, fontSize: 12 }}>Devices</span>
           </div>
-          <p style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 8 }}>Manage connected devices</p>
+          <div style={{ height: 4, borderRadius: 2, background: "var(--color-surface-raised)", overflow: "hidden", marginBottom: 10 }}>
+            <div style={{ width: "100%", height: "100%", background: "var(--accent-gradient)" }} />
+          </div>
+          <p style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 8 }}>Pair a device to start syncing</p>
           <NavLink to="/peers" style={{ textDecoration: "none" }}>
-            <button style={{ width: "100%", padding: "6px 0", borderRadius: 6, background: "var(--color-ink)", color: "white", fontWeight: 500, fontSize: 11, border: "none", cursor: "pointer" }}>
+            <button style={{ width: "100%", padding: "6px 0", borderRadius: "var(--radius-control)", background: "var(--accent-gradient)", color: "white", fontWeight: 500, fontSize: 11, border: "none", cursor: "pointer" }}>
               Manage devices
             </button>
           </NavLink>

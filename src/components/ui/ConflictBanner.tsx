@@ -43,7 +43,7 @@ export function ConflictBanner() {
     <div style={{ marginBottom: 16 }}>
       {conflicts.map(c => (
         <div key={c.id} style={{
-          background: "#FEF2F2", border: "1px solid var(--color-danger)", borderRadius: 10,
+          background: "rgba(255, 92, 92, 0.08)", border: "1px solid rgba(255, 92, 92, 0.45)", borderRadius: 10,
           padding: "12px 16px", marginBottom: 8,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -70,7 +70,7 @@ export function ConflictBanner() {
             </div>
           </div>
           {explanations[c.id] && (
-            <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(220,38,38,0.05)", borderRadius: 6, fontSize: 12, lineHeight: 1.6 }}>
+            <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(255, 92, 92, 0.07)", borderRadius: 6, fontSize: 12, lineHeight: 1.6 }}>
               <span style={{ fontWeight: 600, fontSize: 11, color: "var(--color-danger)", display: "block", marginBottom: 3 }}>Soffit AI</span>
               {explanations[c.id]}
             </div>

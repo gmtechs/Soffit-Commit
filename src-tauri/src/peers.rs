@@ -8,10 +8,11 @@ pub fn add_peer(
     conn: &Connection,
     node_id: &str,
     display_name: &str,
-    public_key: &str,
+    public_key: Option<&str>,
 ) -> Result<Peer> {
     let id = Uuid::new_v4().to_string();
     let last_seen = Utc::now().to_rfc3339();
+    let pk = public_key.unwrap_or("").to_string();
 
     conn.execute(
         "INSERT INTO peers (id, node_id, display_name, public_key, trust_status, last_seen, is_online)
@@ -21,18 +22,61 @@ pub fn add_peer(
            public_key = excluded.public_key,
            last_seen = excluded.last_seen,
            is_online = 1",
-        rusqlite::params![id, node_id, display_name, public_key, last_seen],
+        rusqlite::params![id, node_id, display_name, pk, last_seen],
     )?;
 
     Ok(Peer {
         id,
         node_id: node_id.to_string(),
         display_name: display_name.to_string(),
-        public_key: public_key.to_string(),
+        public_key: pk,
         trust_status: "trusted".to_string(),
         last_seen: Some(last_seen),
         is_online: true,
     })
+}
+
+/// Register an authenticated peer if it is not known yet and return the peer
+/// row id that permission rows reference. A display name the user has
+/// customised and an existing online flag are both left untouched, so this is
+/// safe to call on every connection.
+pub fn ensure_peer_row(conn: &Connection, node_id: &str, display_name: &str) -> Result<String> {
+    if let Ok(id) = conn.query_row(
+        "SELECT id FROM peers WHERE node_id = ?1",
+        rusqlite::params![node_id],
+        |row| row.get::<_, String>(0),
+    ) {
+        return Ok(id);
+    }
+
+    let id = Uuid::new_v4().to_string();
+    let last_seen = Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO peers (id, node_id, display_name, public_key, trust_status, last_seen, is_online)
+         VALUES (?1, ?2, ?3, '', 'trusted', ?4, 1)",
+        rusqlite::params![id, node_id, display_name, last_seen],
+    )?;
+    Ok(id)
+}
+
+/// Grant `level` on every share this device owns. Called as soon as a peer
+/// connects (and when a share is created), so a connected device starts
+/// receiving content immediately instead of waiting for a manual per-share
+/// permission step. Idempotent: a re-run only refreshes level and timestamp.
+pub fn grant_all_owned_shares(
+    conn: &Connection,
+    peer_id: &str,
+    level: PermissionLevel,
+) -> Result<usize> {
+    let share_ids: Vec<String> = {
+        let mut stmt = conn.prepare("SELECT id FROM shares WHERE is_owner = 1")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+    for share_id in &share_ids {
+        set_permission(conn, share_id, peer_id, level.clone())?;
+    }
+    Ok(share_ids.len())
 }
 
 /// Start every app session pessimistically; a peer becomes online only after
@@ -59,15 +103,84 @@ mod tests {
     fn refreshing_a_peer_preserves_its_endpoint_address() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("CREATE TABLE peers (id TEXT PRIMARY KEY, node_id TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, public_key TEXT NOT NULL, trust_status TEXT NOT NULL, last_seen TEXT, is_online INTEGER NOT NULL, endpoint_addr TEXT);").unwrap();
-        add_peer(&conn, "node-a", "First", "key-a").unwrap();
+        add_peer(&conn, "node-a", "First", Some("key-a")).unwrap();
         conn.execute(
             "UPDATE peers SET endpoint_addr = 'ticket' WHERE node_id = 'node-a'",
             [],
         )
         .unwrap();
-        add_peer(&conn, "node-a", "Renamed", "key-b").unwrap();
+        add_peer(&conn, "node-a", "Renamed", Some("key-b")).unwrap();
         let row: (String, String, String) = conn.query_row("SELECT display_name, public_key, endpoint_addr FROM peers WHERE node_id = 'node-a'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
         assert_eq!(row, ("Renamed".into(), "key-b".into(), "ticket".into()));
+    }
+
+    #[test]
+    fn connecting_peer_gets_edit_on_every_owned_share() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE peers (id TEXT PRIMARY KEY, node_id TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, public_key TEXT NOT NULL, trust_status TEXT NOT NULL, last_seen TEXT, is_online INTEGER NOT NULL, endpoint_addr TEXT);
+             CREATE TABLE shares (id TEXT PRIMARY KEY, path TEXT NOT NULL, display_name TEXT NOT NULL, is_owner INTEGER NOT NULL, selective_sync INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, owner_node_id TEXT);
+             CREATE TABLE share_permissions (id TEXT PRIMARY KEY, share_id TEXT NOT NULL, peer_id TEXT NOT NULL, level TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(share_id, peer_id));",
+        )
+        .unwrap();
+
+        // The row is created on first sight and reused afterwards, and a name
+        // the user may have customised survives a later connect.
+        let first = ensure_peer_row(&conn, "node-x", "Fresh").unwrap();
+        let again = ensure_peer_row(&conn, "node-x", "Renamed").unwrap();
+        assert_eq!(first, again, "a reconnect must not duplicate the peer row");
+        let (name,): (String,) = conn
+            .query_row(
+                "SELECT display_name FROM peers WHERE node_id = 'node-x'",
+                [],
+                |r| Ok((r.get(0)?,)),
+            )
+            .unwrap();
+        assert_eq!(name, "Fresh", "an existing display name must be preserved");
+
+        // Two owned shares (one even still flagged selective) and one received
+        // share: only owned shares gain a permission row.
+        conn.execute(
+            "INSERT INTO shares (id, path, display_name, is_owner, selective_sync, created_at)
+             VALUES ('s1','/tmp/s1','Owned',1,1,'t'), ('s2','/tmp/s2','Owned2',1,0,'t'), ('s3','/tmp/s3','Received',0,0,'t')",
+            [],
+        )
+        .unwrap();
+
+        let granted = grant_all_owned_shares(&conn, &first, PermissionLevel::Edit).unwrap();
+        assert_eq!(granted, 2, "only owned shares are granted");
+
+        let levels: Vec<String> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT sp.level FROM share_permissions sp
+                     JOIN shares s ON s.id = sp.share_id
+                     WHERE s.is_owner = 1 ORDER BY sp.share_id",
+                )
+                .unwrap();
+            stmt.query_map([], |row| row.get(0))
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect()
+        };
+        assert_eq!(levels, vec!["edit", "edit"]);
+
+        let received: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM share_permissions sp
+                 JOIN shares s ON s.id = sp.share_id WHERE s.is_owner = 0",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(received, 0, "received shares must not gain owner-side rows");
+
+        // Idempotent: re-granting on the next connect must not duplicate rows.
+        grant_all_owned_shares(&conn, &first, PermissionLevel::Edit).unwrap();
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM share_permissions", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(total, 2);
     }
 }
 

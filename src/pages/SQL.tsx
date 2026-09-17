@@ -220,7 +220,7 @@ function ScriptResults({ results }: { results: ScriptStatementResult[] }) {
   return (
     <div>
       {hasError && (
-        <div style={{ padding: "10px 14px", background: "#FEF2F2", border: "1px solid var(--color-danger)", borderRadius: 6, marginBottom: 8, fontSize: 12 }}>
+        <div style={{ padding: "10px 14px", background: "rgba(255, 92, 92, 0.08)", border: "1px solid rgba(255, 92, 92, 0.45)", borderRadius: 6, marginBottom: 8, fontSize: 12 }}>
           <p style={{ fontWeight: 700, color: "var(--color-danger)", marginBottom: 4 }}>
             Error at statement {last.statement_index} (line {last.line_number})
           </p>

@@ -75,7 +75,7 @@ pub async fn run_peer_connection(
     conn: iroh::endpoint::Connection,
     node: &Arc<IrohNode>,
     peer_node_id: &str,
-    _peer_display_name: &str,
+    peer_display_name: &str,
     shared: Arc<SharedCtx>,
 ) {
     node.conns
@@ -90,6 +90,23 @@ pub async fn run_peer_connection(
         tokio::spawn(async move {
             service_peer_streams(conn_reader, &node_reader, &shared_reader, &peer_reader).await;
         });
+    }
+
+    // A peer that has completed the authenticated handshake is trusted with
+    // everything this device owns: register it and grant every owned share now,
+    // before the first push below, so content starts streaming the moment the
+    // connection is up rather than after a manual permission step.
+    if let Ok(db) = rusqlite::Connection::open(&node.db_path) {
+        match peers::ensure_peer_row(&db, peer_node_id, peer_display_name) {
+            Ok(peer_id) => {
+                if let Err(err) =
+                    peers::grant_all_owned_shares(&db, &peer_id, PermissionLevel::Edit)
+                {
+                    eprintln!("[sync] cannot grant shares to {peer_node_id}: {err}");
+                }
+            }
+            Err(err) => eprintln!("[sync] cannot register peer {peer_node_id}: {err}"),
+        }
     }
 
     // Keep serving inbound streams (e.g. this device receiving a push the
@@ -254,7 +271,9 @@ async fn service_peer_streams(
             SyncMessage::ShareGrant {
                 share_id,
                 display_name,
-                selective_sync,
+                // Sync is all-or-nothing: a granted share is always kept in
+                // full, so the sender's selective flag is not acted on.
+                selective_sync: _,
             } => {
                 if let Ok(share_db) = rusqlite::Connection::open(&node.db_path) {
                     let _ = shares::ensure_receiver_share(
@@ -262,7 +281,7 @@ async fn service_peer_streams(
                         &node.shared_root,
                         &share_id,
                         &display_name,
-                        selective_sync,
+                        false,
                         peer_node_id,
                     );
                 }
@@ -402,40 +421,10 @@ async fn push_owned_shares(
             shares::list_files_in_share(&db, &share.id).unwrap_or_default()
         };
 
-        // Selective-sync shares are metadata-only: the peer sees the file list
-        // and pulls individual files when it opens them (technical spec §12).
-        if share.selective_sync {
-            send_control(
-                conn,
-                &SyncMessage::ShareGrant {
-                    share_id: share.id.clone(),
-                    display_name: share.display_name.clone(),
-                    selective_sync: true,
-                },
-            )
-            .await?;
-            let (tx, rx) = oneshot::channel();
-            shared
-                .pending_index
-                .lock()
-                .await
-                .insert(share.id.clone(), tx);
-            send_control(
-                conn,
-                &SyncMessage::FileIndexRequest {
-                    share_id: share.id.clone(),
-                },
-            )
-            .await?;
-            // The reply is recorded receiver-side as Pending metadata rows;
-            // no content is pushed for selective shares.
-            let _: Vec<IndexedFile> = timeout(INDEX_TIMEOUT, rx)
-                .await
-                .ok()
-                .and_then(|r| r.ok())
-                .unwrap_or_default();
-            continue;
-        }
+        // Every granted share transfers in full on connect: the peer's folder
+        // is brought level with the owner's as soon as the connection is up.
+        // Selective (fetch-on-open) mode is no longer offered, so there is no
+        // metadata-only path here.
 
         // Grant visibility + ask the peer for its local index so we only
         // transfer what is actually missing or changed.
@@ -445,7 +434,7 @@ async fn push_owned_shares(
                 &SyncMessage::ShareGrant {
                     share_id: share.id.clone(),
                     display_name: share.display_name.clone(),
-                    selective_sync: share.selective_sync,
+                    selective_sync: false,
                 },
             )
             .await?;
@@ -1045,7 +1034,8 @@ mod tests {
                 crate::shares::create_share(&conn, owner_folder.to_str().unwrap(), "Docs")
                     .unwrap();
             let addr_json = serde_json::to_string(&node_b.endpoint.addr()).unwrap();
-            let peer = crate::peers::add_peer(&conn, &node_b.node_id, "Receiver", "pk-b").unwrap();
+            let peer =
+                crate::peers::add_peer(&conn, &node_b.node_id, "Receiver", Some("pk-b")).unwrap();
             crate::pairing::update_peer_endpoint(&conn, &node_b.node_id, &addr_json).unwrap();
             crate::peers::set_permission(&conn, &share.id, &peer.id, PermissionLevel::Edit)
                 .unwrap();
@@ -1221,6 +1211,100 @@ mod tests {
         )
         .await;
         assert_eq!(conflicts, 1, "conflict rows must not duplicate");
+
+        drop(node_a);
+        drop(node_b);
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    /// The pairing promise: connect, and the owner's files stream over. No
+    /// manual peer registration, no manual per-share permission, no selective
+    /// sync gate in between.
+    #[tokio::test]
+    async fn a_freshly_connected_peer_receives_files_without_manual_grants() {
+        use crate::network::IrohNode;
+        use std::time::Duration;
+
+        let base = std::env::temp_dir().join(format!("soffit-auto-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&base).unwrap();
+        let owner_folder = base.join("owner-docs");
+        std::fs::create_dir_all(&owner_folder).unwrap();
+        let receiver_shared_root = base.join("receiver-shared");
+        std::fs::create_dir_all(&receiver_shared_root).unwrap();
+
+        let db_a = base.join("owner.sqlite");
+        let db_b = base.join("receiver.sqlite");
+        for db_path in [&db_a, &db_b] {
+            let conn = crate::db::init_db(db_path).unwrap();
+            crate::conflicts::ensure_conflicts_table(&conn).unwrap();
+        }
+
+        let key_a = crate::network::identity::load_or_create(&base.join("owner.key")).unwrap();
+        let key_b = crate::network::identity::load_or_create(&base.join("receiver.key")).unwrap();
+        let node_a = IrohNode::start(key_a, db_a.clone(), base.join("a-shared")).await.unwrap();
+        let node_b =
+            IrohNode::start(key_b, db_b.clone(), receiver_shared_root.clone()).await.unwrap();
+
+        std::fs::write(owner_folder.join("report.md"), b"# auto").unwrap();
+
+        // Deliberately NO add_peer and NO set_permission: the connection itself
+        // must register the peer and grant every owned share.
+        let share_id: String = {
+            let conn = rusqlite::Connection::open(&db_a).unwrap();
+            crate::shares::create_share(&conn, owner_folder.to_str().unwrap(), "Docs")
+                .unwrap()
+                .id
+        };
+        {
+            let conn = rusqlite::Connection::open(&db_a).unwrap();
+            let n: i64 = conn
+                .query_row("SELECT COUNT(*) FROM share_permissions", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 0, "precondition: no permission rows exist yet");
+        }
+
+        let addr_b = serde_json::to_string(&node_b.endpoint.addr()).unwrap();
+        node_a.connect_to_peer(&addr_b, "Receiver").await.unwrap();
+
+        let b_share_dir = receiver_shared_root.join(&share_id);
+        let target = b_share_dir.join("report.md");
+        let mut arrived = false;
+        for _ in 0..300 {
+            if std::fs::read(&target).map(|b| b == b"# auto").unwrap_or(false) {
+                arrived = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        assert!(arrived, "file never arrived without a manual grant");
+
+        // The connection registered the peer and granted the share.
+        {
+            let conn = rusqlite::Connection::open(&db_a).unwrap();
+            let level: String = conn
+                .query_row(
+                    "SELECT sp.level FROM share_permissions sp
+                     JOIN peers p ON p.id = sp.peer_id
+                     WHERE sp.share_id = ?1 AND p.node_id = ?2",
+                    rusqlite::params![share_id, node_b.node_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(level, "edit", "the fresh peer was granted on connect");
+        }
+        // The received copy is a full local share, not a metadata-only stub.
+        {
+            let conn = rusqlite::Connection::open(&db_b).unwrap();
+            let (is_owner, selective): (i64, i64) = conn
+                .query_row(
+                    "SELECT is_owner, selective_sync FROM shares WHERE id = ?1",
+                    rusqlite::params![share_id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(is_owner, 0);
+            assert_eq!(selective, 0, "received shares are always kept in full");
+        }
 
         drop(node_a);
         drop(node_b);

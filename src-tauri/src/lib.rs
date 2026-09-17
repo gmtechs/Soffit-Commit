@@ -29,6 +29,8 @@ pub struct AppState {
     pub sql_engine: Mutex<SqlEngine>,
     pub versions_dir: Mutex<PathBuf>,
     pub rt: tokio::runtime::Handle,
+    /// Resolves a short pairing code to a peer address over the local network.
+    pub rendezvous: Arc<network::Rendezvous>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -122,7 +124,7 @@ pub fn run() {
                                             &conn,
                                             &node_id,
                                             &display_name,
-                                            &node_id,
+                                            Some(&node_id),
                                         ) {
                                             pairing::update_peer_endpoint(
                                                 &conn,
@@ -247,12 +249,23 @@ pub fn run() {
             }
 
             let lock_watch_rt = rt_handle.clone();
+
+            // LAN rendezvous: lets an 8-character code resolve to a peer
+            // address without any server. Failure to bind is non-fatal (the
+            // portable ticket path still works), so it never breaks startup.
+            let rendezvous = network::Rendezvous::start();
+            rt_handle.spawn({
+                let rv = rendezvous.clone();
+                async move { rv.spawn_loops().await }
+            });
+
             app.manage(AppState {
                 db: Mutex::new(conn),
                 iroh_node: Mutex::new(iroh_node),
                 sql_engine: Mutex::new(sql_engine),
                 versions_dir: Mutex::new(versions_dir),
                 rt: rt_handle,
+                rendezvous,
             });
 
             // Lock housekeeping (modules §4): warn the holder shortly before
@@ -370,6 +383,7 @@ pub fn run() {
             commands::cmd_list_users,
             commands::cmd_update_user,
             commands::cmd_generate_pairing_code,
+            commands::cmd_stop_pairing_broadcast,
             commands::cmd_consume_pairing_code,
             commands::cmd_add_peer,
             commands::cmd_reconnect_peers,
