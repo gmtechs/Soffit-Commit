@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { UserPlus, Trash2, Edit2, Check, X, Copy, Monitor } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { UserPlus, Trash2, Edit2, Check, X, Copy, Monitor, Folder, ChevronRight } from "lucide-react";
+import { PeerAccess } from "./PeerAccess";
 import {
   listPeers, removePeer, renamePeer, generatePairingCode,
   consumePairingCode, reconnectPeers,
@@ -29,6 +30,11 @@ export function PeersPage() {
   const [editName, setEditName] = useState("");
   const [ownedShares, setOwnedShares] = useState<Share[]>([]);
   const [permMap, setPermMap] = useState<Record<string, "none" | "view" | "edit">>({});
+  const [accessPeerId, setAccessPeerId] = useState<string | null>(null);
+  const [permissionsReady, setPermissionsReady] = useState<Record<string, boolean>>({});
+  const permissionRevision = useRef(0);
+  const permissionSaving = useRef(false);
+  const accessPeer = peers.find(p => p.id === accessPeerId);
   const { toast } = useToast();
 
   const load = () => {
@@ -37,12 +43,18 @@ export function PeersPage() {
       .catch(() => {});
     listPeers().then(async ps => {
       setPeers(ps);
-      if (ps.length === 0) return;
-      const rows = await Promise.all(ps.map(p => getPeerPermissions(p.id).catch(() => [])));
+      if (ps.length === 0 || permissionSaving.current) return;
+      const revision = permissionRevision.current;
+      const rows = await Promise.all(ps.map(p => getPeerPermissions(p.id).catch(() => null)));
+      if (revision !== permissionRevision.current || permissionSaving.current) return;
+      setPermissionsReady(Object.fromEntries(ps.map((p, i) => [p.id, rows[i] !== null])));
       setPermMap(prev => {
-        const next: Record<string, "none" | "view" | "edit"> = { ...prev };
+        const next = { ...prev };
         ps.forEach((p, i) => {
-          for (const row of rows[i]) next[`${p.id}:${row.share_id}`] = row.level;
+          const permissions = rows[i];
+          if (!permissions) return;
+          Object.keys(next).filter(key => key.startsWith(`${p.id}:`)).forEach(key => delete next[key]);
+          for (const row of permissions) next[`${p.id}:${row.share_id}`] = row.level;
         });
         return next;
       });
@@ -108,14 +120,18 @@ export function PeersPage() {
     catch (err: any) { toast("danger", String(err)); }
   };
 
-  const handlePermission = async (peerId: string, shareId: string, shareName: string, level: string) => {
+  const handlePermission = async (peerId: string, shareId: string, shareName: string, level: "none" | "view" | "edit") => {
+    if (permissionSaving.current) return;
+    permissionSaving.current = true;
+    permissionRevision.current++;
     try {
       await setPermission(shareId, peerId, level);
-      setPermMap(m => ({ ...m, [`${peerId}:${shareId}`]: level as "none" | "view" | "edit" }));
+      setPermMap(m => ({ ...m, [`${peerId}:${shareId}`]: level }));
       toast("success", level === "none"
         ? `Access to "${shareName}" revoked`
         : `"${shareName}" shared — this device can ${level === "view" ? "view" : "edit"}`);
     } catch (err: any) { toast("danger", String(err)); }
+    finally { permissionSaving.current = false; permissionRevision.current++; }
   };
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
@@ -139,7 +155,7 @@ export function PeersPage() {
         </Button>
       </div>
 
-      <div style={{ background: "var(--color-surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-card)", overflow: "hidden" }}>
+      <div className="peers-table-wrap">
         {peers.length === 0 ? (
           <div style={{ padding: 56, textAlign: "center", color: "var(--color-text-muted)" }}>
             <Monitor size={40} style={{ margin: "0 auto 14px" }} />
@@ -150,7 +166,7 @@ export function PeersPage() {
             <Button variant="primary" onClick={openPairModal}><UserPlus size={14} /> Add first device</Button>
           </div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <table className="peers-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "var(--color-bg)", borderBottom: "1px solid var(--color-border)" }}>
                 {["Device", "Status", "Shared folders", "Last seen", "Actions"].map((h, i) => (
@@ -190,28 +206,14 @@ export function PeersPage() {
                     <StatusChip tone={p.is_online ? "green" : "gray"}>{p.is_online ? "Online" : "Offline"}</StatusChip>
                   </td>
                   <td style={{ padding: "12px 16px" }}>
-                    {ownedShares.length === 0 ? (
-                      <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>No shares yet</span>
-                    ) : (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {ownedShares.map(s => (
-                          <div key={s.id} title={s.path} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 4px 3px 10px", borderRadius: 999, background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", maxWidth: 230 }}>
-                            <span style={{ fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {s.display_name}
-                            </span>
-                            <select
-                              value={permMap[`${p.id}:${s.id}`] ?? "none"}
-                              onChange={e => handlePermission(p.id, s.id, s.display_name, e.target.value)}
-                              style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 999, border: "none", cursor: "pointer", background: (permMap[`${p.id}:${s.id}`] ?? "none") === "edit" ? "rgba(59, 107, 255, 0.16)" : (permMap[`${p.id}:${s.id}`] ?? "none") === "view" ? "rgba(250, 204, 21, 0.16)" : "transparent", color: (permMap[`${p.id}:${s.id}`] ?? "none") === "edit" ? "var(--color-primary)" : (permMap[`${p.id}:${s.id}`] ?? "none") === "view" ? "var(--color-warning)" : "var(--color-text-muted)" }}
-                            >
-                              <option value="none">No access</option>
-                              <option value="view">View</option>
-                              <option value="edit">Edit</option>
-                            </select>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <button className="peer-folder-summary" aria-label={`Manage folder access for ${p.display_name}`} onClick={() => setAccessPeerId(p.id)}>
+                      <Folder size={19} />
+                      <span>
+                        <strong>{permissionsReady[p.id] ? `${ownedShares.filter(s => (permMap[`${p.id}:${s.id}`] ?? "none") !== "none").length} folders shared` : "Loading access…"}</strong>
+                        <small>Manage folder access</small>
+                      </span>
+                      <ChevronRight size={15} />
+                    </button>
                   </td>
                   <td style={{ padding: "12px 16px", color: "var(--color-text-secondary)" }}>
                     {p.last_seen ? new Date(p.last_seen).toLocaleString() : "Never"}
@@ -228,6 +230,8 @@ export function PeersPage() {
           </table>
         )}
       </div>
+
+      {accessPeer && <PeerAccess key={accessPeer.id} peer={accessPeer} shares={ownedShares} permissions={permMap} ready={!!permissionsReady[accessPeer.id]} onClose={() => setAccessPeerId(null)} onChange={handlePermission} />}
 
       {/* Pairing modal */}
       <Modal open={pairOpen} onClose={() => setPairOpen(false)} title="Add device" width={500}>
