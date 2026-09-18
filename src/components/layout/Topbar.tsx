@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Search, Sun, Moon, X, ChevronDown, User, Link2, Bell, LayoutGrid, Settings, Users } from "lucide-react";
+import { Search, Sun, Moon, X, User, Link2, Bell, LayoutGrid, Settings, Users } from "lucide-react";
 import { useAuthStore } from "../../store/auth";
 import { applyTheme, useTheme } from "../../lib/theme";
 import { getNodeId, setSetting, search, listPeers, listConflicts, listActivity, type SearchResult } from "../../lib/tauri";
@@ -26,7 +26,7 @@ export function Topbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const name = user?.username ?? "User";
-  const initials = name.slice(0, 2).toUpperCase();
+  const initial = name.slice(0, 1).toUpperCase();
 
   const [nodeId, setNodeId] = useState<string | null>(null);
   const theme = useTheme();
@@ -40,6 +40,7 @@ export function Topbar() {
   const [notifications, setNotifications] = useState<{ id: string; type: string; message: string; path?: string }[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
+  const avatarCloseTimer = useRef<number | null>(null);
 
   const searchRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -92,6 +93,14 @@ export function Topbar() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Close the account menu with Escape regardless of where focus sits
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDropdownOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dropdownOpen]);
 
   const toggleTheme = async () => {
     const next = theme === "light" ? "dark" : "light";
@@ -258,14 +267,13 @@ export function Topbar() {
       </button>
 
       {/* Avatar + dropdown */}
-      <div ref={dropdownRef} style={{ position: "relative" }}>
+      <div ref={dropdownRef} style={{ position: "relative" }}
+        onMouseEnter={() => { if (avatarCloseTimer.current) { window.clearTimeout(avatarCloseTimer.current); avatarCloseTimer.current = null; } setDropdownOpen(true); }}
+        onMouseLeave={() => { avatarCloseTimer.current = window.setTimeout(() => { avatarCloseTimer.current = null; setDropdownOpen(false); }, 150); }}>
         <button onClick={() => setDropdownOpen(o => !o)}
-          style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 10px", borderRadius: 6, background: "var(--color-bg)", border: "1px solid var(--color-border)", cursor: "pointer" }}>
-          <div style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--color-primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 11 }}>
-            {initials}
-          </div>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-ink)" }}>{name}</span>
-          <ChevronDown size={12} color="var(--color-text-muted)" />
+          aria-label={`Account menu for ${name}`} aria-haspopup="menu" aria-expanded={dropdownOpen} title={name}
+          style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--color-primary)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: 0 }}>
+          {initial}
         </button>
 
         {dropdownOpen && (
@@ -273,7 +281,7 @@ export function Topbar() {
             {/* Profile info */}
             <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--color-border)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 11 }}>{initials}</div>
+                <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 11 }}>{initial}</div>
                 <div>
                   <p style={{ fontSize: 13, fontWeight: 600 }}>{name}</p>
                   <p style={{ fontSize: 11, color: "var(--color-success)", display: "flex", alignItems: "center", gap: 4 }}>
