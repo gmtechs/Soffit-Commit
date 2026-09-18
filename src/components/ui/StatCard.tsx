@@ -1,16 +1,15 @@
 import React from "react";
-import { TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
 
 interface StatCardProps {
   icon: React.ReactNode;
   title: string;
   value: string;
-  delta?: number;
-  detailsLink?: () => void;
+  /** Honest scope/window context, e.g. "Across all shares" or "All time". */
+  caption?: string;
   children?: React.ReactNode;
 }
 
-export function StatCard({ icon, title, value, delta, detailsLink, children }: StatCardProps) {
+export function StatCard({ icon, title, value, caption, children }: StatCardProps) {
   return (
     <div style={{
       background: "var(--color-surface)",
@@ -18,24 +17,12 @@ export function StatCard({ icon, title, value, delta, detailsLink, children }: S
       border: "1px solid var(--color-border)",
       padding: "12px 14px",
     }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ color: "var(--color-text-muted)" }}>{icon}</span>
-          <span style={{ fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 500 }}>{title}</span>
-        </div>
-        {detailsLink && (
-          <button onClick={detailsLink} style={{ fontSize: 11, color: "var(--color-primary)", display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer" }}>
-            Details <ArrowRight size={10} />
-          </button>
-        )}
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: "var(--accent-glow)", color: "var(--color-primary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</span>
+        <span style={{ fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 500 }}>{title}</span>
       </div>
-      <div style={{ fontSize: 18, fontWeight: 700, color: "var(--color-ink)", marginBottom: 4 }}>{value}</div>
-      {delta !== undefined && (
-        <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 500, color: delta >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
-          {delta >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-          {Math.abs(delta)}% vs last week
-        </span>
-      )}
+      <div style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--color-ink)" }}>{value}</div>
+      {caption && <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 4 }}>{caption}</div>}
       {children}
     </div>
   );

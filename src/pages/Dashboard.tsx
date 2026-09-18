@@ -59,10 +59,10 @@ export function DashboardPage() {
       </div>
 
       <div className="dashboard-kpis" style={cardGrid}>
-        <StatCard icon={<HardDrive size={18} />} title="Storage used" value={s ? formatBytes(s.storage_used_bytes) : "—"} delta={s?.storage_delta_pct} detailsLink={() => navigate("/files")} />
-        <StatCard icon={<RefreshCw size={18} />} title="Files synced" value={s ? String(s.files_synced) : "—"} delta={s?.files_synced_delta_pct} detailsLink={() => navigate("/files")} />
-        <StatCard icon={<FileEdit size={18} />} title="Files edited this month" value={s ? String(s.files_edited_this_month) : "—"} delta={s?.files_edited_delta_pct} />
-        <StatCard icon={<AlertTriangle size={18} />} title="Conflicts resolved" value={s ? String(s.conflicts_resolved) : "—"} delta={s?.conflicts_delta_pct} />
+        <StatCard icon={<HardDrive size={16} />} title="Storage used" value={s ? formatBytes(s.storage_used_bytes) : "—"} caption="Across all shares" />
+        <StatCard icon={<RefreshCw size={16} />} title="Files synced" value={s ? String(s.files_synced) : "—"} caption={`of ${totalFiles} indexed files`} />
+        <StatCard icon={<FileEdit size={16} />} title="Files edited this month" value={s ? String(s.files_edited_this_month) : "—"} caption="File saves since the 1st" />
+        <StatCard icon={<AlertTriangle size={16} />} title="Conflicts resolved" value={s ? String(s.conflicts_resolved) : "—"} caption="All time" />
       </div>
 
       <div className="dashboard-secondary" style={cardGrid}>
