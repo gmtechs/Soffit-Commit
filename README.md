@@ -3,7 +3,7 @@
 **A private, local-first workspace for syncing folders, documents, spreadsheets, and SQL — peer to peer, with offline AI assistance built in.**
 
 [![Release](https://img.shields.io/github/v/release/gmtechs/Soffit-Commit?label=release&color=2b4cff)](https://github.com/gmtechs/Soffit-Commit/releases/latest)
-[![Installers](https://img.shields.io/github/actions/workflow/status/gmtechs/Soffit-Commit/release.yml?label=installers&color=2b4cff)](https://github.com/gmtechs/Soffit-Commit/actions/workflows/release.yml)
+[![Build](https://img.shields.io/badge/build-GitHub%20Actions-2b4cff?logo=githubactions&logoColor=white)](https://github.com/gmtechs/Soffit-Commit/actions/workflows/release.yml)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-2b4cff)](https://github.com/gmtechs/Soffit-Commit/releases/latest)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24c8db)](https://tauri.app)
 
